@@ -229,11 +229,20 @@ impl FiduciaMcp {
         &self,
         Parameters(params): Parameters<ServicesParams>,
     ) -> Result<CallToolResult, McpError> {
-        let path = match &params.service {
-            Some(service) => format!("/v1/services/{}", urlencode(service)),
-            None => "/v1/services".to_string(),
+        let result = match params.service {
+            Some(service) => {
+                let path = format!("/v1/services/{}", urlencode(&service));
+                self.upstream
+                    .node_call(move |c| c.service_instances(&service), &path)
+                    .await
+            }
+            None => {
+                self.upstream
+                    .node_call(|c| c.service_list(), "/v1/services")
+                    .await
+            }
         };
-        render(self.upstream.get_json(Plane::Node, &path).await)
+        render(result)
     }
 
     #[tool(

@@ -215,6 +215,20 @@ impl Upstream {
     }
 }
 
+/// Render a fiducia-client error the same way `get_json` renders raw HTTP
+/// failures: keep the upstream JSON body — it's structured and worth showing.
+fn format_client_error(err: fiducia_client::Error) -> String {
+    match err {
+        fiducia_client::Error::Http { status, body } => {
+            let body = body
+                .map(|b| b.to_string())
+                .unwrap_or_else(|| "(empty body)".to_string());
+            format!("node returned {status}: {body}")
+        }
+        fiducia_client::Error::Transport(message) => format!("node request failed: {message}"),
+    }
+}
+
 /// Percent-encode a value for use inside a query string.
 pub fn urlencode(value: &str) -> String {
     let mut out = String::with_capacity(value.len());

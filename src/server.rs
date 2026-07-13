@@ -71,6 +71,106 @@ pub struct FileLeaseParams {
     pub path: String,
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CloudflareZoneParams {
+    /// Zone name (e.g. "fiducia.cloud") or a 32-char zone id.
+    pub zone: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CloudflareUpsertParams {
+    /// Zone name or id the record lives in.
+    pub zone: String,
+    /// Record type: one of A, AAAA, CNAME, TXT, MX.
+    #[serde(rename = "type")]
+    pub record_type: String,
+    /// Record name (FQDN, e.g. "app.fiducia.cloud").
+    pub name: String,
+    /// Record value (IP, hostname, or text content).
+    pub content: String,
+    /// TTL in seconds; 1 = automatic (default).
+    #[serde(default)]
+    pub ttl: Option<i64>,
+    /// Proxy through Cloudflare — only honored for A/AAAA/CNAME (default false).
+    #[serde(default)]
+    pub proxied: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CloudflareDeleteParams {
+    /// Zone name or id.
+    pub zone: String,
+    /// Explicit DNS record id to delete.
+    pub record_id: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DomainParams {
+    /// Domain to look up, e.g. "fiducia.cloud".
+    pub domain: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DnsCheckParams {
+    /// Domain to check, e.g. "app.fiducia.cloud". Omit when using `preset`.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Record type (A, AAAA, CNAME, NS, TXT, MX). Defaults to A when `name` is set.
+    #[serde(default, rename = "type")]
+    pub record_type: Option<String>,
+    /// Expected values; the check PASSes if any is observed.
+    #[serde(default)]
+    pub values: Option<Vec<String>>,
+    /// Built-in check set; use "fiducia" for the fiducia.cloud DNS cutover.
+    #[serde(default)]
+    pub preset: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sWorkloadsParams {
+    /// kubectl context (validated against `kubectl config get-contexts`).
+    pub context: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sRolloutParams {
+    /// kubectl context (validated before use).
+    pub context: String,
+    /// "deployment" or "statefulset".
+    pub kind: String,
+    /// Workload name.
+    pub name: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sEventsParams {
+    /// kubectl context (validated before use).
+    pub context: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+    /// How many recent events to return (default 30).
+    #[serde(default)]
+    pub last: Option<usize>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sServiceParams {
+    /// kubectl context (validated before use).
+    pub context: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+    /// Service name to inspect endpoints for.
+    pub service: String,
+}
+
 const OBSERVE_KINDS: [&str; 5] = ["locks", "semaphores", "elections", "shards", "metrics"];
 
 #[derive(Clone)]

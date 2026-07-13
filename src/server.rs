@@ -76,6 +76,10 @@ const OBSERVE_KINDS: [&str; 5] = ["locks", "semaphores", "elections", "shards", 
 #[derive(Clone)]
 pub struct FiduciaMcp {
     upstream: Arc<Upstream>,
+    cloudflare: Arc<Cloudflare>,
+    /// Dedicated client for RDAP: redirects disabled so we follow exactly one
+    /// hop from the bootstrap server ourselves.
+    rdap_client: reqwest::Client,
 }
 
 fn ok_json(value: serde_json::Value) -> CallToolResult {

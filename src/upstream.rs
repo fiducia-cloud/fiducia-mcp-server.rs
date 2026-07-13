@@ -10,6 +10,8 @@
 //! balancer, which verifies the key and injects the trusted-hop headers
 //! itself (and strips any client-supplied ones).
 
+use fiducia_client::FiduciaClient;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub const NODE_URL_ENV: &str = "FIDUCIA_NODE_URL";

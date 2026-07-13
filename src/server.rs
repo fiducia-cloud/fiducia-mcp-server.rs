@@ -212,8 +212,13 @@ impl FiduciaMcp {
         &self,
         Parameters(params): Parameters<LockGetParams>,
     ) -> Result<CallToolResult, McpError> {
-        let path = format!("/v1/locks?key={}", urlencode(&params.key));
-        render(self.upstream.get_json(Plane::Node, &path).await)
+        let key = params.key;
+        let path = format!("/v1/locks?key={}", urlencode(&key));
+        render(
+            self.upstream
+                .node_call(move |c| c.lock_get(&key), &path)
+                .await,
+        )
     }
 
     #[tool(

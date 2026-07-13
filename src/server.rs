@@ -580,7 +580,11 @@ impl ServerHandler for FiduciaMcp {
                  reachable and env credentials: `cluster_status`/`cluster_nodes`/\
                  `placement`/`route_key` hit the brain, `node_status`/`observe`/\
                  `kv_get`/`lock_get`/`services` hit a node, `file_lease` hits the \
-                 ai-agent control plane. Nothing here mutates cluster state."
+                 ai-agent control plane. `cloudflare_*` manage DNS (CLOUDFLARE_API_TOKEN); \
+                 `domain_registrar_status`/`dns_check` verify domains from outside; \
+                 `k8s_*` run read-only kubectl. The ONLY tools that mutate anything are \
+                 `cloudflare_dns_upsert`/`cloudflare_dns_delete`, and only when \
+                 FIDUCIA_MCP_ALLOW_MUTATIONS=1; everything else is read-only."
                     .to_string(),
             )
     }

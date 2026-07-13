@@ -152,7 +152,7 @@ impl FiduciaMcp {
                        state. GET node /v1/status."
     )]
     async fn node_status(&self) -> Result<CallToolResult, McpError> {
-        render(self.upstream.get_json(Plane::Node, "/v1/status").await)
+        render(self.upstream.node_call(|c| c.status(), "/v1/status").await)
     }
 
     #[tool(description = "Read-only observability on the node, org-scoped. \

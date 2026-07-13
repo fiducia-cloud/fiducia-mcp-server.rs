@@ -152,7 +152,7 @@ impl FiduciaMcp {
                        state. GET node /v1/status."
     )]
     async fn node_status(&self) -> Result<CallToolResult, McpError> {
-        render(self.upstream.get_json(Plane::Node, "/v1/status").await)
+        render(self.upstream.node_call(|c| c.status(), "/v1/status").await)
     }
 
     #[tool(description = "Read-only observability on the node, org-scoped. \
@@ -184,16 +184,26 @@ impl FiduciaMcp {
         &self,
         Parameters(params): Parameters<KvGetParams>,
     ) -> Result<CallToolResult, McpError> {
-        let path = match (&params.key, &params.prefix) {
-            (Some(key), None) => format!("/v1/kv?key={}", urlencode(key)),
-            (None, Some(prefix)) => format!("/v1/kv?prefix={}", urlencode(prefix)),
+        let result = match (params.key, params.prefix) {
+            (Some(key), None) => {
+                let path = format!("/v1/kv?key={}", urlencode(&key));
+                self.upstream
+                    .node_call(move |c| c.kv_get(&key), &path)
+                    .await
+            }
+            (None, Some(prefix)) => {
+                let path = format!("/v1/kv?prefix={}", urlencode(&prefix));
+                self.upstream
+                    .node_call(move |c| c.kv_list(&prefix), &path)
+                    .await
+            }
             _ => {
                 return Ok(err_text(
                     "provide exactly one of `key` or `prefix`".to_string(),
                 ))
             }
         };
-        render(self.upstream.get_json(Plane::Node, &path).await)
+        render(result)
     }
 
     #[tool(
@@ -204,8 +214,13 @@ impl FiduciaMcp {
         &self,
         Parameters(params): Parameters<LockGetParams>,
     ) -> Result<CallToolResult, McpError> {
-        let path = format!("/v1/locks?key={}", urlencode(&params.key));
-        render(self.upstream.get_json(Plane::Node, &path).await)
+        let key = params.key;
+        let path = format!("/v1/locks?key={}", urlencode(&key));
+        render(
+            self.upstream
+                .node_call(move |c| c.lock_get(&key), &path)
+                .await,
+        )
     }
 
     #[tool(
@@ -216,11 +231,20 @@ impl FiduciaMcp {
         &self,
         Parameters(params): Parameters<ServicesParams>,
     ) -> Result<CallToolResult, McpError> {
-        let path = match &params.service {
-            Some(service) => format!("/v1/services/{}", urlencode(service)),
-            None => "/v1/services".to_string(),
+        let result = match params.service {
+            Some(service) => {
+                let path = format!("/v1/services/{}", urlencode(&service));
+                self.upstream
+                    .node_call(move |c| c.service_instances(&service), &path)
+                    .await
+            }
+            None => {
+                self.upstream
+                    .node_call(|c| c.service_list(), "/v1/services")
+                    .await
+            }
         };
-        render(self.upstream.get_json(Plane::Node, &path).await)
+        render(result)
     }
 
     #[tool(

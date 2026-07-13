@@ -10,6 +10,8 @@
 //! balancer, which verifies the key and injects the trusted-hop headers
 //! itself (and strips any client-supplied ones).
 
+use fiducia_client::FiduciaClient;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub const NODE_URL_ENV: &str = "FIDUCIA_NODE_URL";
@@ -124,6 +126,11 @@ impl Config {
 
 pub struct Upstream {
     client: reqwest::Client,
+    /// Official Rust client for the node data plane, present in internal mode
+    /// (secret + org id, no API key). Blocking (ureq), so every call runs on
+    /// spawn_blocking. Bearer mode keeps raw HTTP: fiducia-client has no way
+    /// to attach an Authorization header.
+    node_client: Option<Arc<FiduciaClient>>,
     pub config: Config,
 }
 
@@ -133,7 +140,45 @@ impl Upstream {
             .timeout(Duration::from_secs(15))
             .build()
             .expect("reqwest client");
-        Self { client, config }
+        let node_client = match (&config.api_key, &config.internal_secret, &config.org_id) {
+            (None, Some(secret), Some(org)) => {
+                let mut c = FiduciaClient::internal(&config.node_url, secret, org);
+                c.request_timeout = Some(Duration::from_secs(15));
+                Some(Arc::new(c))
+            }
+            _ => None,
+        };
+        Self {
+            client,
+            node_client,
+            config,
+        }
+    }
+
+    /// Call the node data plane. Internal mode goes through fiducia-client on
+    /// the blocking pool; otherwise (bearer mode, or unconfigured — which
+    /// yields the guidance error from `headers`) falls back to a raw GET of
+    /// `fallback_path`.
+    pub async fn node_call<F>(
+        &self,
+        call: F,
+        fallback_path: &str,
+    ) -> Result<serde_json::Value, String>
+    where
+        F: FnOnce(&FiduciaClient) -> Result<serde_json::Value, fiducia_client::Error>
+            + Send
+            + 'static,
+    {
+        match &self.node_client {
+            Some(node_client) => {
+                let node_client = Arc::clone(node_client);
+                tokio::task::spawn_blocking(move || call(&node_client))
+                    .await
+                    .map_err(|e| format!("node client task failed: {e}"))?
+                    .map_err(format_client_error)
+            }
+            None => self.get_json(Plane::Node, fallback_path).await,
+        }
     }
 
     /// GET `<plane base>/<path_and_query>` with the plane's auth headers and
@@ -167,6 +212,20 @@ impl Upstream {
         } else {
             Err(format!("{url} returned {status}: {json}"))
         }
+    }
+}
+
+/// Render a fiducia-client error the same way `get_json` renders raw HTTP
+/// failures: keep the upstream JSON body — it's structured and worth showing.
+fn format_client_error(err: fiducia_client::Error) -> String {
+    match err {
+        fiducia_client::Error::Http { status, body } => {
+            let body = body
+                .map(|b| b.to_string())
+                .unwrap_or_else(|| "(empty body)".to_string());
+            format!("node returned {status}: {body}")
+        }
+        fiducia_client::Error::Transport(message) => format!("node request failed: {message}"),
     }
 }
 
@@ -256,6 +315,23 @@ mod tests {
     fn agent_cp_uses_x_internal_auth() {
         let headers = cfg().headers(Plane::AgentControlPlane).unwrap();
         assert_eq!(headers, vec![("x-internal-auth", "cp-s3cret".to_string())]);
+    }
+
+    #[test]
+    fn node_client_built_in_internal_mode_only() {
+        assert!(Upstream::new(cfg()).node_client.is_some());
+
+        let mut bearer = cfg();
+        bearer.api_key = Some("fk_live_abc".into());
+        assert!(
+            Upstream::new(bearer).node_client.is_none(),
+            "bearer mode must bypass fiducia-client (no Authorization support)"
+        );
+
+        let mut bare = cfg();
+        bare.internal_secret = None;
+        bare.control_plane_secret = None;
+        assert!(Upstream::new(bare).node_client.is_none());
     }
 
     #[test]

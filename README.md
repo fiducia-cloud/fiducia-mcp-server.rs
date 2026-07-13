@@ -90,6 +90,10 @@ Or in a project `.mcp.json`:
 
 ## Development
 
+Building requires the sibling checkout `../fiducia-clients` (org convention:
+repos live side by side under the `fiducia.cloud` workspace or as
+`fiducia-monorepo/apps/*` submodules).
+
 ```sh
 cargo test
 cargo run   # then paste MCP JSON-RPC on stdin, e.g. an initialize request

@@ -9,11 +9,14 @@ README.md for the tool table and env configuration.
   logging goes to stderr (`tracing_subscriber` with `.with_writer(std::io::stderr)`).
   This is also why the crate does not use `fiducia-telemetry` — its fallback
   logger writes to stdout.
-- **Tools stay read-only.** Do not add tools that acquire/release locks or
-  leases, write KV, or change placement/scale. Fenced mutations belong to
-  `fiducia-client` / the `fiducia` CLI, where fencing tokens are handled
-  end-to-end. If a write tool is ever justified, it needs explicit operator
-  sign-off first.
+- **Tools stay read-only** — with exactly two sanctioned exceptions:
+  `cloudflare_dns_upsert` and `cloudflare_dns_delete`, both gated behind
+  `FIDUCIA_MCP_ALLOW_MUTATIONS=1` (they return a gate error otherwise and never
+  call the API). Do NOT add tools that acquire/release locks or leases, write
+  KV, change placement/scale, or apply/scale/delete Kubernetes objects. Cluster
+  mutations belong to `fiducia-client` / the `fiducia` CLI, where fencing tokens
+  are handled end-to-end. Any further write tool needs explicit operator
+  sign-off and must reuse the same mutation gate.
 - **Auth headers are per-plane and easy to mix up** (see `src/upstream.rs`):
   node = `x-fiducia-internal-auth` + `x-fiducia-org-id`; brain =
   `x-fiducia-internal-auth` only; ai-agent control plane = `x-internal-auth`.

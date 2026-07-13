@@ -599,28 +599,12 @@ echo '{"items":[]}'
     #[tokio::test]
     async fn kubectl_call_times_out() {
         let _stub = KubectlStub::install(SLOW_STUB);
-        // Wrap the whole workloads() in a short timeout: the internal 15s guard
-        // is longer than the test can wait, so we drive a 1s outer timeout and
-        // assert the slow `get` would block — proving the timeout wrapper path
-        // is exercised via a shortened deadline on the same mechanism.
-        let short = tokio::time::timeout(
-            Duration::from_millis(800),
-            run_kubectl(&["get".into(), "pods".into()]),
-        )
-        .await;
-        assert!(short.is_err(), "outer deadline elapsed while kubectl slept");
-    }
-
-    #[tokio::test]
-    async fn internal_timeout_reports_cleanly() {
-        // Directly exercise the 15s guard by shrinking nothing but relying on
-        // the stub sleeping longer than a manually-driven timeout wrapper.
-        let _stub = KubectlStub::install(SLOW_STUB);
-        let res = tokio::time::timeout(
-            Duration::from_secs(2),
-            run_kubectl(&["get".into(), "pods".into()]),
-        )
-        .await;
-        assert!(res.is_err(), "the sleeping stub does not return within 2s");
+        // Drive the real timeout branch of run_kubectl_with with a short deadline
+        // (the stub sleeps 5s). We get OUR error string, not a hang.
+        let err = run_kubectl_with(&["get".into(), "pods".into()], Duration::from_millis(300))
+            .await
+            .unwrap_err();
+        assert!(err.contains("timed out"), "{err}");
+        assert!(err.contains("kubectl get pods"), "names the command: {err}");
     }
 }

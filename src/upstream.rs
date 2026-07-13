@@ -124,6 +124,11 @@ impl Config {
 
 pub struct Upstream {
     client: reqwest::Client,
+    /// Official Rust client for the node data plane, present in internal mode
+    /// (secret + org id, no API key). Blocking (ureq), so every call runs on
+    /// spawn_blocking. Bearer mode keeps raw HTTP: fiducia-client has no way
+    /// to attach an Authorization header.
+    node_client: Option<Arc<FiduciaClient>>,
     pub config: Config,
 }
 
@@ -133,7 +138,45 @@ impl Upstream {
             .timeout(Duration::from_secs(15))
             .build()
             .expect("reqwest client");
-        Self { client, config }
+        let node_client = match (&config.api_key, &config.internal_secret, &config.org_id) {
+            (None, Some(secret), Some(org)) => {
+                let mut c = FiduciaClient::internal(&config.node_url, secret, org);
+                c.request_timeout = Some(Duration::from_secs(15));
+                Some(Arc::new(c))
+            }
+            _ => None,
+        };
+        Self {
+            client,
+            node_client,
+            config,
+        }
+    }
+
+    /// Call the node data plane. Internal mode goes through fiducia-client on
+    /// the blocking pool; otherwise (bearer mode, or unconfigured — which
+    /// yields the guidance error from `headers`) falls back to a raw GET of
+    /// `fallback_path`.
+    pub async fn node_call<F>(
+        &self,
+        call: F,
+        fallback_path: &str,
+    ) -> Result<serde_json::Value, String>
+    where
+        F: FnOnce(&FiduciaClient) -> Result<serde_json::Value, fiducia_client::Error>
+            + Send
+            + 'static,
+    {
+        match &self.node_client {
+            Some(node_client) => {
+                let node_client = Arc::clone(node_client);
+                tokio::task::spawn_blocking(move || call(&node_client))
+                    .await
+                    .map_err(|e| format!("node client task failed: {e}"))?
+                    .map_err(format_client_error)
+            }
+            None => self.get_json(Plane::Node, fallback_path).await,
+        }
     }
 
     /// GET `<plane base>/<path_and_query>` with the plane's auth headers and

@@ -36,6 +36,21 @@ mode (the client cannot attach `Authorization`) use plain HTTP.
 | `lock_get` | node `GET /v1/locks?key=` | Who holds this lock? Fencing token, wait queue. |
 | `services` | node `GET /v1/services[/{name}]` | Service discovery: services or live instances. |
 | `file_lease` | agent control plane `GET /v1/file-leases` | Which agent holds the lease on (repository, path)? |
+| `cloudflare_zones` | Cloudflare `GET /zones` | Zones on the account: name, id, status, nameservers. |
+| `cloudflare_dns_records` | Cloudflare `GET /zones/{id}/dns_records` | DNS records in a zone (name or id), paginated. |
+| `cloudflare_dns_upsert` **⚠︎ write** | Cloudflare `POST`/`PUT .../dns_records` | Create-or-update a record (type,name). **Gated.** |
+| `cloudflare_dns_delete` **⚠︎ write** | Cloudflare `DELETE .../dns_records/{id}` | Delete a record by id. **Gated.** |
+| `domain_registrar_status` | RDAP `GET /domain/{d}` | Registrar, nameservers, status, expiry (via rdap.org). |
+| `dns_check` | resolver (hickory) | Verify live DNS; `preset:"fiducia"` checks the whole cutover. |
+| `k8s_contexts` | `kubectl config get-contexts` | Known contexts + which are allowed. |
+| `k8s_workloads` | `kubectl get deploy,sts,pods -o json` | Deployments/statefulsets ready/desired + images + pods. |
+| `k8s_rollout_status` | `kubectl rollout status --watch=false` | Current rollout state of a deployment/statefulset. |
+| `k8s_events` | `kubectl get events -o json` | Most recent events in a namespace (default 30). |
+| `k8s_service_endpoints` | `kubectl get endpoints -o json` | Ready / not-ready backend addresses for a service. |
+
+**⚠︎ write** marks the only two mutating tools. Both refuse to run unless
+`FIDUCIA_MCP_ALLOW_MUTATIONS=1`; without it they return an error explaining the
+gate and never call the API.
 
 ## Configuration (env)
 

@@ -261,7 +261,7 @@ pub async fn events(context: &str, namespace: &str, last: usize) -> Result<Value
         .map(|a| a.iter().collect())
         .unwrap_or_default();
     // RFC3339 timestamps sort lexicographically == chronologically.
-    items.sort_by(|a, b| event_ts(a).cmp(&event_ts(b)));
+    items.sort_by_cached_key(|e| event_ts(e));
     let recent: Vec<Value> = items
         .iter()
         .rev()

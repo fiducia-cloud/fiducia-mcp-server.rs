@@ -1,0 +1,29 @@
+# Crate manifest: package metadata and dependencies for fiducia-mcp-server.
+[package]
+name = "fiducia-mcp-server"
+version = "0.1.0"
+edition = "2021"
+description = "MCP server for fiducia.cloud — read-only diagnostic tools over the brain (control plane), node (data plane), and ai-agent control plane HTTP APIs, plus an embedded org/architecture map."
+
+[lib]
+name = "fiducia_mcp_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fiducia-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# Official Rust MCP SDK: stdio transport + #[tool] macros + schemars re-export.
+rmcp = { version = "2.2", features = ["server", "macros", "schemars", "transport-io"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+# Logs MUST go to stderr: stdout is the MCP wire. fiducia-telemetry writes to
+# stdout, so this crate deliberately does not use it.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Talking to brain (:8095), node (:8090) and the ai-agent control plane.
+# rustls so the server can also point at the LB over HTTPS.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

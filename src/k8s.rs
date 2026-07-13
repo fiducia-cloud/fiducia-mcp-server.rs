@@ -423,16 +423,44 @@ fn collect_addresses(addresses: Option<&Value>, out: &mut Vec<Value>) {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     /// Serializes tests that mutate `PATH` / `FIDUCIA_K8S_CONTEXTS` (process-global).
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+    static TEMP_SEQ: AtomicUsize = AtomicUsize::new(0);
+
+    /// Minimal std-only temp directory (removed on drop) — avoids a dev-dep.
+    struct TempDir {
+        path: PathBuf,
+    }
+    impl TempDir {
+        fn new() -> Self {
+            let mut path = std::env::temp_dir();
+            path.push(format!(
+                "fiducia-mcp-kubectl-{}-{}",
+                std::process::id(),
+                TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
 
     /// Installs a stub `kubectl` on `PATH` and restores `PATH` +
     /// `FIDUCIA_K8S_CONTEXTS` on drop. `script` is the body after `#!/bin/sh`.
     struct KubectlStub {
         _lock: std::sync::MutexGuard<'static, ()>,
-        _dir: tempdir::TempDir,
+        _dir: TempDir,
         prev_path: Option<String>,
         prev_contexts: Option<String>,
     }
@@ -440,7 +468,7 @@ mod tests {
     impl KubectlStub {
         fn install(script: &str) -> Self {
             let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-            let dir = tempdir::TempDir::new("kubectl-stub");
+            let dir = TempDir::new();
             let path = dir.path().join("kubectl");
             let mut f = std::fs::File::create(&path).unwrap();
             writeln!(f, "#!/bin/sh").unwrap();

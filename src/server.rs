@@ -610,10 +610,21 @@ mod tests {
             "lock_get",
             "services",
             "file_lease",
+            "cloudflare_zones",
+            "cloudflare_dns_records",
+            "cloudflare_dns_upsert",
+            "cloudflare_dns_delete",
+            "domain_registrar_status",
+            "dns_check",
+            "k8s_contexts",
+            "k8s_workloads",
+            "k8s_rollout_status",
+            "k8s_events",
+            "k8s_service_endpoints",
         ] {
             assert!(router.has_route(tool), "missing tool {tool}");
         }
-        assert_eq!(router.list_all().len(), 11);
+        assert_eq!(router.list_all().len(), 22);
     }
 
     #[test]

@@ -31,7 +31,7 @@ const FIDUCIA_PAGES_CNAME: &str = "fiducia-cloud.github.io";
 const FIDUCIA_EDGE_IP: &str = "95.217.171.250";
 const CLOUDFLARE_NS_SUFFIX: &str = ".ns.cloudflare.com";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DnsType {
     A,
     Aaaa,

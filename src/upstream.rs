@@ -318,6 +318,23 @@ mod tests {
     }
 
     #[test]
+    fn node_client_built_in_internal_mode_only() {
+        assert!(Upstream::new(cfg()).node_client.is_some());
+
+        let mut bearer = cfg();
+        bearer.api_key = Some("fk_live_abc".into());
+        assert!(
+            Upstream::new(bearer).node_client.is_none(),
+            "bearer mode must bypass fiducia-client (no Authorization support)"
+        );
+
+        let mut bare = cfg();
+        bare.internal_secret = None;
+        bare.control_plane_secret = None;
+        assert!(Upstream::new(bare).node_client.is_none());
+    }
+
+    #[test]
     fn urlencode_reserved_chars() {
         assert_eq!(urlencode("orders/checkout"), "orders%2Fcheckout");
         assert_eq!(urlencode("a b&c=d"), "a%20b%26c%3Dd");

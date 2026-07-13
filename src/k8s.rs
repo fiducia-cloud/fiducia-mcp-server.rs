@@ -28,14 +28,21 @@ struct RunOutput {
     stderr: String,
 }
 
-/// Spawn `kubectl <args>` with a hard timeout. `args` is passed verbatim as
-/// argv, never through a shell.
+/// Spawn `kubectl <args>` with the standard 15s timeout. `args` is passed
+/// verbatim as argv, never through a shell.
 async fn run_kubectl(args: &[String]) -> Result<RunOutput, String> {
-    let fut = Command::new("kubectl").args(args).output();
-    match tokio::time::timeout(TIMEOUT, fut).await {
+    run_kubectl_with(args, TIMEOUT).await
+}
+
+/// As [`run_kubectl`], but with a caller-chosen timeout (tests use a short one
+/// to exercise the timeout branch without waiting 15s). `kill_on_drop` ensures
+/// a timed-out child is reaped rather than leaked.
+async fn run_kubectl_with(args: &[String], timeout: Duration) -> Result<RunOutput, String> {
+    let fut = Command::new("kubectl").args(args).kill_on_drop(true).output();
+    match tokio::time::timeout(timeout, fut).await {
         Err(_) => Err(format!(
             "kubectl timed out after {}s: kubectl {}",
-            TIMEOUT.as_secs(),
+            timeout.as_secs().max(1),
             args.join(" ")
         )),
         Ok(Err(e)) => Err(format!(

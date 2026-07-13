@@ -16,7 +16,8 @@ path = "src/main.rs"
 [dependencies]
 # Official Rust MCP SDK: stdio transport + #[tool] macros + schemars re-export.
 rmcp = { version = "2.2", features = ["server", "macros", "schemars", "transport-io"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "signal"] }
+# "time" for the kubectl invocation timeout, "process" for shelling out to kubectl.
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "signal", "time", "process"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
@@ -24,6 +25,18 @@ tracing = "0.1"
 # stdout, so this crate deliberately does not use it.
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Talking to brain (:8095), node (:8090) and the ai-agent control plane.
+# Talking to brain (:8095), node (:8090), the ai-agent control plane, the
+# Cloudflare v4 API, and RDAP servers.
 # rustls so the server can also point at the LB over HTTPS.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# dns_check: async DNS lookups — system resolver config with a fallback to
+# Cloudflare 1.1.1.1 + Google 8.8.8.8. Abstracted behind `domains::Resolve`
+# so tests inject a mock and stay offline.
+hickory-resolver = "0.25"
+
+[dev-dependencies]
+# Offline mock upstreams (Cloudflare API envelope, RDAP redirect hop) bound
+# to 127.0.0.1:0 — tests never touch the network.
+axum = "0.8"
+tokio = { version = "1", features = ["net"] }

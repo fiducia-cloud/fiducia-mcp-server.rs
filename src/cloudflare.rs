@@ -312,7 +312,7 @@ mod tests {
     use axum::{
         extract::Query,
         http::{HeaderMap, StatusCode},
-        routing::{delete, get, post, put},
+        routing::{delete, get, put},
         Json, Router,
     };
     use std::collections::HashMap;

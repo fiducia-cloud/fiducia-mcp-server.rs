@@ -39,7 +39,10 @@ async fn run_kubectl(args: &[String]) -> Result<RunOutput, String> {
 /// to exercise the timeout branch without waiting 15s). `kill_on_drop` ensures
 /// a timed-out child is reaped rather than leaked.
 async fn run_kubectl_with(args: &[String], timeout: Duration) -> Result<RunOutput, String> {
-    let fut = Command::new("kubectl").args(args).kill_on_drop(true).output();
+    let fut = Command::new("kubectl")
+        .args(args)
+        .kill_on_drop(true)
+        .output();
     match tokio::time::timeout(timeout, fut).await {
         Err(_) => Err(format!(
             "kubectl timed out after {}s: kubectl {}",
@@ -169,7 +172,10 @@ pub async fn contexts() -> Result<Value, String> {
     let list: Vec<Value> = available
         .iter()
         .map(|c| {
-            let allowed = allow.as_ref().map(|a| a.iter().any(|x| x == c)).unwrap_or(true);
+            let allowed = allow
+                .as_ref()
+                .map(|a| a.iter().any(|x| x == c))
+                .unwrap_or(true);
             json!({ "name": c, "allowed": allowed })
         })
         .collect();
@@ -381,7 +387,11 @@ fn event_ts(event: &Value) -> String {
         .get("lastTimestamp")
         .and_then(Value::as_str)
         .or_else(|| event.get("eventTime").and_then(Value::as_str))
-        .or_else(|| event.pointer("/metadata/creationTimestamp").and_then(Value::as_str))
+        .or_else(|| {
+            event
+                .pointer("/metadata/creationTimestamp")
+                .and_then(Value::as_str)
+        })
         .unwrap_or("")
         .to_string()
 }
@@ -488,7 +498,12 @@ mod tests {
             };
             std::env::set_var("PATH", new_path);
             std::env::remove_var(K8S_CONTEXTS_ENV);
-            Self { _lock: lock, _dir: dir, prev_path, prev_contexts }
+            Self {
+                _lock: lock,
+                _dir: dir,
+                prev_path,
+                prev_contexts,
+            }
         }
 
         fn restrict(&self, csv: &str) {
@@ -527,8 +542,14 @@ exit 1
         let out = contexts().await.unwrap();
         let list = out["contexts"].as_array().unwrap();
         assert_eq!(list.len(), 2);
-        let prod = list.iter().find(|c| c["name"] == "gke_fiducia_prod").unwrap();
-        let staging = list.iter().find(|c| c["name"] == "aws_fiducia_staging").unwrap();
+        let prod = list
+            .iter()
+            .find(|c| c["name"] == "gke_fiducia_prod")
+            .unwrap();
+        let staging = list
+            .iter()
+            .find(|c| c["name"] == "aws_fiducia_staging")
+            .unwrap();
         assert_eq!(prod["allowed"], true);
         assert_eq!(staging["allowed"], false);
     }
@@ -545,7 +566,9 @@ exit 1
         let stub = KubectlStub::install(CONTEXTS_STUB);
         // The context exists in kubectl, but is not in the allowlist.
         stub.restrict("gke_fiducia_prod");
-        let err = workloads("aws_fiducia_staging", "fiducia").await.unwrap_err();
+        let err = workloads("aws_fiducia_staging", "fiducia")
+            .await
+            .unwrap_err();
         assert!(err.contains(K8S_CONTEXTS_ENV), "{err}");
         assert!(err.contains("not permitted"), "{err}");
     }

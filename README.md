@@ -10,8 +10,11 @@ logs go to stderr).
 
 ## Tools
 
-All tools are **read-only** (HTTP GETs). Mutations — acquiring locks, moving
-shards, releasing leases — deliberately stay with the real clients
+Tools are **read-only by default**. The *only* exceptions are two Cloudflare
+DNS write tools (`cloudflare_dns_upsert`, `cloudflare_dns_delete`), which stay
+locked unless `FIDUCIA_MCP_ALLOW_MUTATIONS=1` is set — see
+[Configuration](#configuration-env). Cluster mutations — acquiring locks,
+moving shards, releasing leases — deliberately stay with the real clients
 (`fiducia-client`, `fiducia` CLI) where fencing tokens are handled properly.
 
 Node data-plane tools (`node_status`, `kv_get`, `lock_get`, `services`) go

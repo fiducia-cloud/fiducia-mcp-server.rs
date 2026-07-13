@@ -221,14 +221,23 @@ impl Cloudflare {
         let (resp, action) = match existing_id {
             Some(rec) => {
                 let path = format!("/zones/{id}/dns_records/{rec}");
-                (self.send(reqwest::Method::PUT, &path, Some(body)).await?, "updated")
+                (
+                    self.send(reqwest::Method::PUT, &path, Some(body)).await?,
+                    "updated",
+                )
             }
             None => {
                 let path = format!("/zones/{id}/dns_records");
-                (self.send(reqwest::Method::POST, &path, Some(body)).await?, "created")
+                (
+                    self.send(reqwest::Method::POST, &path, Some(body)).await?,
+                    "created",
+                )
             }
         };
-        let record = resp.get("result").map(summarize_record).unwrap_or(Value::Null);
+        let record = resp
+            .get("result")
+            .map(summarize_record)
+            .unwrap_or(Value::Null);
         Ok(json!({ "action": action, "zone_id": id, "record": record }))
     }
 
@@ -373,7 +382,10 @@ mod tests {
                 let seen = Arc::clone(&seen2);
                 async move {
                     if !require_bearer(&headers, &seen) {
-                        return (StatusCode::FORBIDDEN, Json(json!({"success": false, "errors": []})));
+                        return (
+                            StatusCode::FORBIDDEN,
+                            Json(json!({"success": false, "errors": []})),
+                        );
                     }
                     (
                         StatusCode::OK,
@@ -397,7 +409,10 @@ mod tests {
         assert_eq!(out["count"], 1);
         assert_eq!(out["zones"][0]["name"], "fiducia.cloud");
         assert_eq!(out["zones"][0]["id"], "z1");
-        assert!(out["zones"][0].get("extra").is_none(), "only the listed fields are kept");
+        assert!(
+            out["zones"][0].get("extra").is_none(),
+            "only the listed fields are kept"
+        );
     }
 
     #[tokio::test]
@@ -419,7 +434,10 @@ mod tests {
         let base = spawn(app).await;
         let cf = Cloudflare::with_base(base, Some("test-token".into()));
         // 32-hex zone id so no name resolution round-trip is needed.
-        let out = cf.dns_records("0123456789abcdef0123456789abcdef").await.unwrap();
+        let out = cf
+            .dns_records("0123456789abcdef0123456789abcdef")
+            .await
+            .unwrap();
         assert_eq!(out["count"], 2, "both pages accumulated");
         assert_eq!(out["records"][0]["id"], "r1");
         assert_eq!(out["records"][1]["id"], "r2");
@@ -443,8 +461,14 @@ mod tests {
         let cf = Cloudflare::with_base(base, Some("super-secret-token".into()));
         let err = cf.zones().await.unwrap_err();
         assert!(err.contains("9109"), "surfaces the CF error code: {err}");
-        assert!(err.contains("Invalid access token"), "surfaces the message: {err}");
-        assert!(!err.contains("super-secret-token"), "must never leak the token: {err}");
+        assert!(
+            err.contains("Invalid access token"),
+            "surfaces the message: {err}"
+        );
+        assert!(
+            !err.contains("super-secret-token"),
+            "must never leak the token: {err}"
+        );
     }
 
     #[tokio::test]
@@ -523,7 +547,9 @@ mod tests {
         assert_eq!(out["action"], "created");
         assert_eq!(out["record"]["id"], "new-rec");
         let calls = calls.lock().unwrap();
-        assert!(calls.iter().any(|c| c.starts_with("FIND A/app.fiducia.cloud")));
+        assert!(calls
+            .iter()
+            .any(|c| c.starts_with("FIND A/app.fiducia.cloud")));
         assert!(calls.contains(&"POST".to_string()));
         assert!(!calls.contains(&"PUT".to_string()));
     }
@@ -588,8 +614,14 @@ mod tests {
             })
             .await
             .unwrap_err();
-        assert!(err.contains(ALLOW_MUTATIONS_ENV), "explains the gate: {err}");
-        assert!(calls.lock().unwrap().is_empty(), "gate blocks before any HTTP call");
+        assert!(
+            err.contains(ALLOW_MUTATIONS_ENV),
+            "explains the gate: {err}"
+        );
+        assert!(
+            calls.lock().unwrap().is_empty(),
+            "gate blocks before any HTTP call"
+        );
     }
 
     #[tokio::test]
@@ -610,13 +642,15 @@ mod tests {
         let hit2 = Arc::clone(&hit);
         let app = Router::new().route(
             "/zones/{id}/dns_records/{rec}",
-            delete(move |axum::extract::Path((_id, rec)): axum::extract::Path<(String, String)>| {
-                let hit = Arc::clone(&hit2);
-                async move {
-                    *hit.lock().unwrap() = Some(rec.clone());
-                    Json(json!({ "success": true, "errors": [], "result": { "id": rec } }))
-                }
-            }),
+            delete(
+                move |axum::extract::Path((_id, rec)): axum::extract::Path<(String, String)>| {
+                    let hit = Arc::clone(&hit2);
+                    async move {
+                        *hit.lock().unwrap() = Some(rec.clone());
+                        Json(json!({ "success": true, "errors": [], "result": { "id": rec } }))
+                    }
+                },
+            ),
         );
         let base = spawn(app).await;
         let cf = Cloudflare::with_base(base, Some("test-token".into()));

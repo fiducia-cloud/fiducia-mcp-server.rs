@@ -485,10 +485,8 @@ impl FiduciaMcp {
 
     // ---- Kubernetes: read-only kubectl (respects KUBECONFIG) ----
 
-    #[tool(
-        description = "List kubectl contexts and mark which are allowed (per \
-                       FIDUCIA_K8S_CONTEXTS). kubectl config get-contexts."
-    )]
+    #[tool(description = "List kubectl contexts and mark which are allowed (per \
+                       FIDUCIA_K8S_CONTEXTS). kubectl config get-contexts.")]
     async fn k8s_contexts(&self) -> Result<CallToolResult, McpError> {
         render(k8s::contexts().await)
     }
@@ -505,10 +503,8 @@ impl FiduciaMcp {
         render(k8s::workloads(&params.context, params.namespace.as_deref().unwrap_or("")).await)
     }
 
-    #[tool(
-        description = "Current rollout status of a deployment or statefulset \
-                       (non-blocking). kubectl rollout status --watch=false."
-    )]
+    #[tool(description = "Current rollout status of a deployment or statefulset \
+                       (non-blocking). kubectl rollout status --watch=false.")]
     async fn k8s_rollout_status(
         &self,
         Parameters(params): Parameters<K8sRolloutParams>,
@@ -542,10 +538,8 @@ impl FiduciaMcp {
         )
     }
 
-    #[tool(
-        description = "Ready and not-ready backend addresses for a service. \
-                       kubectl get endpoints -o json."
-    )]
+    #[tool(description = "Ready and not-ready backend addresses for a service. \
+                       kubectl get endpoints -o json.")]
     async fn k8s_service_endpoints(
         &self,
         Parameters(params): Parameters<K8sServiceParams>,

@@ -204,7 +204,10 @@ pub async fn registrar_status(
             .get(reqwest::header::LOCATION)
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| {
-                format!("RDAP {url} returned {} without a Location header", resp.status())
+                format!(
+                    "RDAP {url} returned {} without a Location header",
+                    resp.status()
+                )
             })?;
         let next = resolve_location(rdap_base, location);
         client
@@ -313,7 +316,9 @@ fn rdap_registrar(json: &Value) -> Value {
 fn vcard_fn(entity: &Value) -> Option<String> {
     let props = entity.get("vcardArray")?.as_array()?.get(1)?.as_array()?;
     for prop in props {
-        let Some(prop) = prop.as_array() else { continue };
+        let Some(prop) = prop.as_array() else {
+            continue;
+        };
         if prop.first().and_then(Value::as_str) == Some("fn") {
             return prop.get(3).and_then(Value::as_str).map(str::to_string);
         }
@@ -332,7 +337,12 @@ pub struct DnsCheckInput {
 }
 
 pub async fn dns_check(resolver: &dyn Resolve, input: DnsCheckInput) -> Result<Value, String> {
-    if let Some(preset) = input.preset.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+    if let Some(preset) = input
+        .preset
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
         return match preset {
             "fiducia" => Ok(preset_fiducia(resolver).await),
             other => Err(format!(
@@ -341,7 +351,12 @@ pub async fn dns_check(resolver: &dyn Resolve, input: DnsCheckInput) -> Result<V
         };
     }
 
-    let Some(name) = input.name.as_deref().map(str::trim).filter(|n| !n.is_empty()) else {
+    let Some(name) = input
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    else {
         return Err(
             "provide `name` (optionally with `type` + `values`), or preset:\"fiducia\"".to_string(),
         );
@@ -430,7 +445,10 @@ async fn preset_fiducia(resolver: &dyn Resolve) -> Value {
 
 async fn github_pages_check(resolver: &dyn Resolve, name: &str) -> Value {
     let a = resolver.lookup(name, DnsType::A).await.unwrap_or_default();
-    let cname = resolver.lookup(name, DnsType::Cname).await.unwrap_or_default();
+    let cname = resolver
+        .lookup(name, DnsType::Cname)
+        .await
+        .unwrap_or_default();
     let a_ok = a.iter().any(|ip| GITHUB_PAGES_IPS.contains(&ip.as_str()));
     let cname_ok = cname
         .iter()
@@ -500,7 +518,9 @@ mod tests {
     }
     impl MockResolver {
         fn new() -> Self {
-            Self { records: HashMap::new() }
+            Self {
+                records: HashMap::new(),
+            }
         }
         fn with(mut self, name: &str, t: DnsType, values: &[&str]) -> Self {
             self.records.insert(
@@ -526,7 +546,11 @@ mod tests {
     async fn preset_all_correct_passes() {
         let resolver = MockResolver::new()
             .with("fiducia.cloud", DnsType::A, &["185.199.108.153"])
-            .with("www.fiducia.cloud", DnsType::Cname, &["fiducia-cloud.github.io"])
+            .with(
+                "www.fiducia.cloud",
+                DnsType::Cname,
+                &["fiducia-cloud.github.io"],
+            )
             .with("app.fiducia.cloud", DnsType::A, &["95.217.171.250"])
             .with("admin.fiducia.cloud", DnsType::A, &["95.217.171.250"])
             .with(
@@ -536,7 +560,12 @@ mod tests {
             );
         let out = dns_check(
             &resolver,
-            DnsCheckInput { name: None, record_type: None, values: None, preset: Some("fiducia".into()) },
+            DnsCheckInput {
+                name: None,
+                record_type: None,
+                values: None,
+                preset: Some("fiducia".into()),
+            },
         )
         .await
         .unwrap();
@@ -556,7 +585,12 @@ mod tests {
             .with("fiducia.cloud", DnsType::Ns, &["ns1.squarespacedns.com"]);
         let out = dns_check(
             &resolver,
-            DnsCheckInput { name: None, record_type: None, values: None, preset: Some("fiducia".into()) },
+            DnsCheckInput {
+                name: None,
+                record_type: None,
+                values: None,
+                preset: Some("fiducia".into()),
+            },
         )
         .await
         .unwrap();
@@ -567,7 +601,7 @@ mod tests {
         assert_eq!(status_of(by_name("app.fiducia.cloud")), "PENDING");
         assert_eq!(status_of(by_name("admin.fiducia.cloud")), "MISMATCH");
         assert_eq!(status_of(by_name("fiducia.cloud")), "PASS"); // GH check
-        // The NS check is keyed on the same name; find it by its expectation.
+                                                                 // The NS check is keyed on the same name; find it by its expectation.
         let ns_check = checks
             .iter()
             .find(|c| c["expect"].as_str().unwrap_or("").contains("cloudflare"))
@@ -585,17 +619,26 @@ mod tests {
             DnsType::Ns,
             &["ana.ns.cloudflare.com", "bob.ns.cloudflare.com"],
         );
-        assert_eq!(status_of(&cloudflare_ns_check(&good, "fiducia.cloud").await), "PASS");
+        assert_eq!(
+            status_of(&cloudflare_ns_check(&good, "fiducia.cloud").await),
+            "PASS"
+        );
 
         let mixed = MockResolver::new().with(
             "fiducia.cloud",
             DnsType::Ns,
             &["ana.ns.cloudflare.com", "ns1.squarespacedns.com"],
         );
-        assert_eq!(status_of(&cloudflare_ns_check(&mixed, "fiducia.cloud").await), "MISMATCH");
+        assert_eq!(
+            status_of(&cloudflare_ns_check(&mixed, "fiducia.cloud").await),
+            "MISMATCH"
+        );
 
         let none = MockResolver::new();
-        assert_eq!(status_of(&cloudflare_ns_check(&none, "fiducia.cloud").await), "PENDING");
+        assert_eq!(
+            status_of(&cloudflare_ns_check(&none, "fiducia.cloud").await),
+            "PENDING"
+        );
     }
 
     #[tokio::test]
@@ -620,7 +663,12 @@ mod tests {
         let resolver = MockResolver::new();
         let err = dns_check(
             &resolver,
-            DnsCheckInput { name: None, record_type: None, values: None, preset: None },
+            DnsCheckInput {
+                name: None,
+                record_type: None,
+                values: None,
+                preset: None,
+            },
         )
         .await
         .unwrap_err();
@@ -679,7 +727,10 @@ mod tests {
                 get(|Path(d): Path<String>| async move {
                     (
                         StatusCode::FOUND,
-                        [(reqwest::header::LOCATION.as_str(), format!("/registry/domain/{d}"))],
+                        [(
+                            reqwest::header::LOCATION.as_str(),
+                            format!("/registry/domain/{d}"),
+                        )],
                         "",
                     )
                 }),

@@ -14,6 +14,12 @@ All tools are **read-only** (HTTP GETs). Mutations — acquiring locks, moving
 shards, releasing leases — deliberately stay with the real clients
 (`fiducia-client`, `fiducia` CLI) where fencing tokens are handled properly.
 
+Node data-plane tools (`node_status`, `kv_get`, `lock_get`, `services`) go
+through the official Rust client — `fiducia-client`, a path dependency on the
+sibling checkout `../fiducia-clients/clients/rust` — in internal mode.
+`observe` (no client coverage), brain, the agent control plane, and bearer
+mode (the client cannot attach `Authorization`) use plain HTTP.
+
 | Tool | Upstream | What it answers |
 |---|---|---|
 | `repo_map` | none (embedded) | What repo does what? Ports, auth headers, invariants. |

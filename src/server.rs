@@ -187,7 +187,9 @@ impl FiduciaMcp {
         let result = match (params.key, params.prefix) {
             (Some(key), None) => {
                 let path = format!("/v1/kv?key={}", urlencode(&key));
-                self.upstream.node_call(move |c| c.kv_get(&key), &path).await
+                self.upstream
+                    .node_call(move |c| c.kv_get(&key), &path)
+                    .await
             }
             (None, Some(prefix)) => {
                 let path = format!("/v1/kv?prefix={}", urlencode(&prefix));

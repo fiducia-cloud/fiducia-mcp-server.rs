@@ -22,6 +22,7 @@ pub const DEFAULT_NAMESPACE: &str = "fiducia";
 const TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_OUTPUT: usize = 32 * 1024;
 
+#[derive(Debug)]
 struct RunOutput {
     success: bool,
     stdout: String,

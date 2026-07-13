@@ -39,6 +39,14 @@ README.md for the tool table and env configuration.
 - `src/server.rs` — the `#[tool_router]` impl; one tool per question.
   Upstream failures return `CallToolResult::error(...)`, not `Err(...)`, so
   the model sees the message and can react.
+- `src/cloudflare.rs` — Cloudflare v4 API (bearer token). Read-only zones/records
+  plus the two gated DNS write tools; maps CF's error envelope without leaking
+  the token.
+- `src/domains.rs` — RDAP registrar lookup + `dns_check`. All DNS lookups go
+  through the `Resolve` trait (real: `SystemResolver` over hickory-resolver;
+  tests: a mock), so checks run offline.
+- `src/k8s.rs` — read-only `kubectl` wrapper (argv builder, context validation,
+  15s timeout, JSON summarizers). Tests stub `kubectl` via a temp script on `PATH`.
 - `src/repo_map.rs` — embedded org/architecture map served by `repo_map`.
   **Update it when repos are added/renamed/archived** (last sync 2026-07).
 

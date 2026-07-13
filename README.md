@@ -63,6 +63,10 @@ gate and never call the API.
 | `FIDUCIA_ORG_ID` | unset | Tenant → `x-fiducia-org-id`; required for direct node calls. |
 | `FIDUCIA_CONTROL_PLANE_SECRET` | falls back to `FIDUCIA_INTERNAL_SECRET` | → `x-internal-auth` on the agent control plane. |
 | `FIDUCIA_API_KEY` | unset | Bearer mode: node-plane calls send `Authorization: Bearer` instead of internal headers — point `FIDUCIA_NODE_URL` at the load balancer. |
+| `CLOUDFLARE_API_TOKEN` | unset | Cloudflare v4 API token (`Zone:Read` + `DNS:Edit`) → `Authorization: Bearer`. Required for the `cloudflare_*` tools; never logged. |
+| `FIDUCIA_MCP_ALLOW_MUTATIONS` | unset | Set to `1` to unlock the two Cloudflare DNS write tools. Anything else keeps them (and the whole server) read-only. |
+| `FIDUCIA_K8S_CONTEXTS` | unset | Optional CSV allowlist restricting which kubectl contexts the `k8s_*` tools may use. Unset = any known context. |
+| `KUBECONFIG` | kubectl default | Honored transparently — the `k8s_*` tools shell out to `kubectl`, which reads it. |
 
 Two ways to reach the data plane:
 

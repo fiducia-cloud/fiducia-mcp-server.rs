@@ -101,8 +101,15 @@ fn render(result: Result<serde_json::Value, String>) -> Result<CallToolResult, M
 #[tool_router]
 impl FiduciaMcp {
     pub fn new(upstream: Upstream) -> Self {
+        let rdap_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("reqwest client");
         Self {
             upstream: Arc::new(upstream),
+            cloudflare: Arc::new(Cloudflare::from_env()),
+            rdap_client,
         }
     }
 

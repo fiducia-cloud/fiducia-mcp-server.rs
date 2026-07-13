@@ -21,7 +21,12 @@ README.md for the tool table and env configuration.
   node = `x-fiducia-internal-auth` + `x-fiducia-org-id`; brain =
   `x-fiducia-internal-auth` only; ai-agent control plane = `x-internal-auth`.
   Keep the unit tests in `upstream.rs` in sync with any change.
-- Never log secret values; log only set/unset (see `main.rs`).
+- Never log secret values; log only set/unset (see `main.rs`). This includes
+  `CLOUDFLARE_API_TOKEN` — it is only ever attached as a bearer header and must
+  never appear in a log line, error string, or tool result.
+- **kubectl is read-only.** Build argv as a `Vec<String>` (never a shell
+  string), validate every `--context` against `kubectl config get-contexts`,
+  and keep the 15s timeout. Add only read-only verbs.
 
 ## Where things live
 

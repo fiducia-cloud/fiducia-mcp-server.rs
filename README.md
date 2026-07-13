@@ -80,6 +80,44 @@ Two ways to reach the data plane:
 Missing credentials never crash the server — the affected tool returns an
 error naming the env var to set.
 
+## Domains
+
+The fiducia.cloud domains are registered at **Squarespace, which exposes no
+public DNS write API**. So this server doesn't try to manage DNS at the
+registrar — it *verifies* the live state from the outside and leaves writes to
+Cloudflare:
+
+- `domain_registrar_status` reads registrar, nameservers, status, and expiry
+  over **RDAP** (`rdap.org`, following one redirect to the authoritative
+  registry). No credentials needed.
+- `dns_check` resolves records with [hickory-resolver] (system config, falling
+  back to `1.1.1.1` / `8.8.8.8`) and compares them to expectations, reporting
+  per-record **PASS / PENDING / MISMATCH**. `preset:"fiducia"` checks the whole
+  cutover in one shot: `fiducia.cloud` + `www` → GitHub Pages, `app.` + `admin.`
+  → the Hetzner edge (`95.217.171.250`), and whether `fiducia.cloud`'s
+  nameservers are `*.ns.cloudflare.com`.
+
+Once the registrable domain's nameservers point at Cloudflare, actual DNS
+writes go through the gated `cloudflare_dns_upsert` / `cloudflare_dns_delete`
+tools. All resolver lookups sit behind a small `Resolve` trait, so the tests
+inject a mock and run fully offline.
+
+[hickory-resolver]: https://crates.io/crates/hickory-resolver
+
+## Kubernetes
+
+The `k8s_*` tools shell out to **`kubectl`** (no `kube-rs` dependency —
+`kubectl` already carries the operator's kubeconfig, contexts, and auth
+plugins, and honors `$KUBECONFIG`). Guardrails:
+
+- **Read-only verbs only:** `config get-contexts`, `get … -o json`,
+  `rollout status --watch=false`, `top`. Nothing applies, scales, or deletes.
+- **Context validation:** every `--context` is checked against
+  `kubectl config get-contexts -o name` before use, and can be further
+  restricted with `FIDUCIA_K8S_CONTEXTS`.
+- **argv, never a shell string** (no word-splitting), and a **15s timeout** per
+  call. Large JSON summaries are truncated to ~32KB with a note.
+
 ## Install & register
 
 ```sh

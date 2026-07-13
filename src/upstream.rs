@@ -43,7 +43,7 @@ pub struct Config {
     pub api_key: Option<String>,
 }
 
-fn env_nonempty(key: &str) -> Option<String> {
+pub(crate) fn env_nonempty(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|v| !v.trim().is_empty())
 }
 

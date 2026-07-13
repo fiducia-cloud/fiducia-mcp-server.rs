@@ -10,8 +10,11 @@ logs go to stderr).
 
 ## Tools
 
-All tools are **read-only** (HTTP GETs). Mutations — acquiring locks, moving
-shards, releasing leases — deliberately stay with the real clients
+Tools are **read-only by default**. The *only* exceptions are two Cloudflare
+DNS write tools (`cloudflare_dns_upsert`, `cloudflare_dns_delete`), which stay
+locked unless `FIDUCIA_MCP_ALLOW_MUTATIONS=1` is set — see
+[Configuration](#configuration-env). Cluster mutations — acquiring locks,
+moving shards, releasing leases — deliberately stay with the real clients
 (`fiducia-client`, `fiducia` CLI) where fencing tokens are handled properly.
 
 Node data-plane tools (`node_status`, `kv_get`, `lock_get`, `services`) go
@@ -33,6 +36,21 @@ mode (the client cannot attach `Authorization`) use plain HTTP.
 | `lock_get` | node `GET /v1/locks?key=` | Who holds this lock? Fencing token, wait queue. |
 | `services` | node `GET /v1/services[/{name}]` | Service discovery: services or live instances. |
 | `file_lease` | agent control plane `GET /v1/file-leases` | Which agent holds the lease on (repository, path)? |
+| `cloudflare_zones` | Cloudflare `GET /zones` | Zones on the account: name, id, status, nameservers. |
+| `cloudflare_dns_records` | Cloudflare `GET /zones/{id}/dns_records` | DNS records in a zone (name or id), paginated. |
+| `cloudflare_dns_upsert` **⚠︎ write** | Cloudflare `POST`/`PUT .../dns_records` | Create-or-update a record (type,name). **Gated.** |
+| `cloudflare_dns_delete` **⚠︎ write** | Cloudflare `DELETE .../dns_records/{id}` | Delete a record by id. **Gated.** |
+| `domain_registrar_status` | RDAP `GET /domain/{d}` | Registrar, nameservers, status, expiry (via rdap.org). |
+| `dns_check` | resolver (hickory) | Verify live DNS; `preset:"fiducia"` checks the whole cutover. |
+| `k8s_contexts` | `kubectl config get-contexts` | Known contexts + which are allowed. |
+| `k8s_workloads` | `kubectl get deploy,sts,pods -o json` | Deployments/statefulsets ready/desired + images + pods. |
+| `k8s_rollout_status` | `kubectl rollout status --watch=false` | Current rollout state of a deployment/statefulset. |
+| `k8s_events` | `kubectl get events -o json` | Most recent events in a namespace (default 30). |
+| `k8s_service_endpoints` | `kubectl get endpoints -o json` | Ready / not-ready backend addresses for a service. |
+
+**⚠︎ write** marks the only two mutating tools. Both refuse to run unless
+`FIDUCIA_MCP_ALLOW_MUTATIONS=1`; without it they return an error explaining the
+gate and never call the API.
 
 ## Configuration (env)
 
@@ -45,6 +63,10 @@ mode (the client cannot attach `Authorization`) use plain HTTP.
 | `FIDUCIA_ORG_ID` | unset | Tenant → `x-fiducia-org-id`; required for direct node calls. |
 | `FIDUCIA_CONTROL_PLANE_SECRET` | falls back to `FIDUCIA_INTERNAL_SECRET` | → `x-internal-auth` on the agent control plane. |
 | `FIDUCIA_API_KEY` | unset | Bearer mode: node-plane calls send `Authorization: Bearer` instead of internal headers — point `FIDUCIA_NODE_URL` at the load balancer. |
+| `CLOUDFLARE_API_TOKEN` | unset | Cloudflare v4 API token (`Zone:Read` + `DNS:Edit`) → `Authorization: Bearer`. Required for the `cloudflare_*` tools; never logged. |
+| `FIDUCIA_MCP_ALLOW_MUTATIONS` | unset | Set to `1` to unlock the two Cloudflare DNS write tools. Anything else keeps them (and the whole server) read-only. |
+| `FIDUCIA_K8S_CONTEXTS` | unset | Optional CSV allowlist restricting which kubectl contexts the `k8s_*` tools may use. Unset = any known context. |
+| `KUBECONFIG` | kubectl default | Honored transparently — the `k8s_*` tools shell out to `kubectl`, which reads it. |
 
 Two ways to reach the data plane:
 
@@ -57,6 +79,44 @@ Two ways to reach the data plane:
 
 Missing credentials never crash the server — the affected tool returns an
 error naming the env var to set.
+
+## Domains
+
+The fiducia.cloud domains are registered at **Squarespace, which exposes no
+public DNS write API**. So this server doesn't try to manage DNS at the
+registrar — it *verifies* the live state from the outside and leaves writes to
+Cloudflare:
+
+- `domain_registrar_status` reads registrar, nameservers, status, and expiry
+  over **RDAP** (`rdap.org`, following one redirect to the authoritative
+  registry). No credentials needed.
+- `dns_check` resolves records with [hickory-resolver] (system config, falling
+  back to `1.1.1.1` / `8.8.8.8`) and compares them to expectations, reporting
+  per-record **PASS / PENDING / MISMATCH**. `preset:"fiducia"` checks the whole
+  cutover in one shot: `fiducia.cloud` + `www` → GitHub Pages, `app.` + `admin.`
+  → the Hetzner edge (`95.217.171.250`), and whether `fiducia.cloud`'s
+  nameservers are `*.ns.cloudflare.com`.
+
+Once the registrable domain's nameservers point at Cloudflare, actual DNS
+writes go through the gated `cloudflare_dns_upsert` / `cloudflare_dns_delete`
+tools. All resolver lookups sit behind a small `Resolve` trait, so the tests
+inject a mock and run fully offline.
+
+[hickory-resolver]: https://crates.io/crates/hickory-resolver
+
+## Kubernetes
+
+The `k8s_*` tools shell out to **`kubectl`** (no `kube-rs` dependency —
+`kubectl` already carries the operator's kubeconfig, contexts, and auth
+plugins, and honors `$KUBECONFIG`). Guardrails:
+
+- **Read-only verbs only:** `config get-contexts`, `get … -o json`,
+  `rollout status --watch=false`, `top`. Nothing applies, scales, or deletes.
+- **Context validation:** every `--context` is checked against
+  `kubectl config get-contexts -o name` before use, and can be further
+  restricted with `FIDUCIA_K8S_CONTEXTS`.
+- **argv, never a shell string** (no word-splitting), and a **15s timeout** per
+  call. Large JSON summaries are truncated to ~32KB with a note.
 
 ## Install & register
 

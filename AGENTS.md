@@ -9,16 +9,24 @@ README.md for the tool table and env configuration.
   logging goes to stderr (`tracing_subscriber` with `.with_writer(std::io::stderr)`).
   This is also why the crate does not use `fiducia-telemetry` — its fallback
   logger writes to stdout.
-- **Tools stay read-only.** Do not add tools that acquire/release locks or
-  leases, write KV, or change placement/scale. Fenced mutations belong to
-  `fiducia-client` / the `fiducia` CLI, where fencing tokens are handled
-  end-to-end. If a write tool is ever justified, it needs explicit operator
-  sign-off first.
+- **Tools stay read-only** — with exactly two sanctioned exceptions:
+  `cloudflare_dns_upsert` and `cloudflare_dns_delete`, both gated behind
+  `FIDUCIA_MCP_ALLOW_MUTATIONS=1` (they return a gate error otherwise and never
+  call the API). Do NOT add tools that acquire/release locks or leases, write
+  KV, change placement/scale, or apply/scale/delete Kubernetes objects. Cluster
+  mutations belong to `fiducia-client` / the `fiducia` CLI, where fencing tokens
+  are handled end-to-end. Any further write tool needs explicit operator
+  sign-off and must reuse the same mutation gate.
 - **Auth headers are per-plane and easy to mix up** (see `src/upstream.rs`):
   node = `x-fiducia-internal-auth` + `x-fiducia-org-id`; brain =
   `x-fiducia-internal-auth` only; ai-agent control plane = `x-internal-auth`.
   Keep the unit tests in `upstream.rs` in sync with any change.
-- Never log secret values; log only set/unset (see `main.rs`).
+- Never log secret values; log only set/unset (see `main.rs`). This includes
+  `CLOUDFLARE_API_TOKEN` — it is only ever attached as a bearer header and must
+  never appear in a log line, error string, or tool result.
+- **kubectl is read-only.** Build argv as a `Vec<String>` (never a shell
+  string), validate every `--context` against `kubectl config get-contexts`,
+  and keep the 15s timeout. Add only read-only verbs.
 
 ## Where things live
 
@@ -31,6 +39,14 @@ README.md for the tool table and env configuration.
 - `src/server.rs` — the `#[tool_router]` impl; one tool per question.
   Upstream failures return `CallToolResult::error(...)`, not `Err(...)`, so
   the model sees the message and can react.
+- `src/cloudflare.rs` — Cloudflare v4 API (bearer token). Read-only zones/records
+  plus the two gated DNS write tools; maps CF's error envelope without leaking
+  the token.
+- `src/domains.rs` — RDAP registrar lookup + `dns_check`. All DNS lookups go
+  through the `Resolve` trait (real: `SystemResolver` over hickory-resolver;
+  tests: a mock), so checks run offline.
+- `src/k8s.rs` — read-only `kubectl` wrapper (argv builder, context validation,
+  15s timeout, JSON summarizers). Tests stub `kubectl` via a temp script on `PATH`.
 - `src/repo_map.rs` — embedded org/architecture map served by `repo_map`.
   **Update it when repos are added/renamed/archived** (last sync 2026-07).
 

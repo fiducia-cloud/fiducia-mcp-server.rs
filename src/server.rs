@@ -14,6 +14,9 @@ use rmcp::{
 };
 use std::sync::Arc;
 
+use crate::cloudflare::{Cloudflare, UpsertParams};
+use crate::domains::{self, DnsCheckInput, SystemResolver};
+use crate::k8s;
 use crate::repo_map::REPO_MAP;
 use crate::upstream::{urlencode, Plane, Upstream};
 
@@ -68,11 +71,115 @@ pub struct FileLeaseParams {
     pub path: String,
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CloudflareZoneParams {
+    /// Zone name (e.g. "fiducia.cloud") or a 32-char zone id.
+    pub zone: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CloudflareUpsertParams {
+    /// Zone name or id the record lives in.
+    pub zone: String,
+    /// Record type: one of A, AAAA, CNAME, TXT, MX.
+    #[serde(rename = "type")]
+    pub record_type: String,
+    /// Record name (FQDN, e.g. "app.fiducia.cloud").
+    pub name: String,
+    /// Record value (IP, hostname, or text content).
+    pub content: String,
+    /// TTL in seconds; 1 = automatic (default).
+    #[serde(default)]
+    pub ttl: Option<i64>,
+    /// Proxy through Cloudflare — only honored for A/AAAA/CNAME (default false).
+    #[serde(default)]
+    pub proxied: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CloudflareDeleteParams {
+    /// Zone name or id.
+    pub zone: String,
+    /// Explicit DNS record id to delete.
+    pub record_id: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DomainParams {
+    /// Domain to look up, e.g. "fiducia.cloud".
+    pub domain: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DnsCheckParams {
+    /// Domain to check, e.g. "app.fiducia.cloud". Omit when using `preset`.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Record type (A, AAAA, CNAME, NS, TXT, MX). Defaults to A when `name` is set.
+    #[serde(default, rename = "type")]
+    pub record_type: Option<String>,
+    /// Expected values; the check PASSes if any is observed.
+    #[serde(default)]
+    pub values: Option<Vec<String>>,
+    /// Built-in check set; use "fiducia" for the fiducia.cloud DNS cutover.
+    #[serde(default)]
+    pub preset: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sWorkloadsParams {
+    /// kubectl context (validated against `kubectl config get-contexts`).
+    pub context: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sRolloutParams {
+    /// kubectl context (validated before use).
+    pub context: String,
+    /// "deployment" or "statefulset".
+    pub kind: String,
+    /// Workload name.
+    pub name: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sEventsParams {
+    /// kubectl context (validated before use).
+    pub context: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+    /// How many recent events to return (default 30).
+    #[serde(default)]
+    pub last: Option<usize>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct K8sServiceParams {
+    /// kubectl context (validated before use).
+    pub context: String,
+    /// Namespace (default "fiducia").
+    #[serde(default)]
+    pub namespace: Option<String>,
+    /// Service name to inspect endpoints for.
+    pub service: String,
+}
+
 const OBSERVE_KINDS: [&str; 5] = ["locks", "semaphores", "elections", "shards", "metrics"];
 
 #[derive(Clone)]
 pub struct FiduciaMcp {
     upstream: Arc<Upstream>,
+    cloudflare: Arc<Cloudflare>,
+    /// Dedicated client for RDAP: redirects disabled so we follow exactly one
+    /// hop from the bootstrap server ourselves.
+    rdap_client: reqwest::Client,
 }
 
 fn ok_json(value: serde_json::Value) -> CallToolResult {
@@ -94,8 +201,15 @@ fn render(result: Result<serde_json::Value, String>) -> Result<CallToolResult, M
 #[tool_router]
 impl FiduciaMcp {
     pub fn new(upstream: Upstream) -> Self {
+        let rdap_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("reqwest client");
         Self {
             upstream: Arc::new(upstream),
+            cloudflare: Arc::new(Cloudflare::from_env()),
+            rdap_client,
         }
     }
 
@@ -268,6 +382,177 @@ impl FiduciaMcp {
                 .await,
         )
     }
+
+    // ---- Cloudflare DNS (needs CLOUDFLARE_API_TOKEN) ----
+
+    #[tool(
+        description = "List Cloudflare zones on the account: name, id, status, \
+                       nameservers. GET Cloudflare /zones."
+    )]
+    async fn cloudflare_zones(&self) -> Result<CallToolResult, McpError> {
+        render(self.cloudflare.zones().await)
+    }
+
+    #[tool(
+        description = "List DNS records in a Cloudflare zone (accepts a zone name or \
+                       id), following pagination → [{id,type,name,content,proxied,ttl}]."
+    )]
+    async fn cloudflare_dns_records(
+        &self,
+        Parameters(params): Parameters<CloudflareZoneParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(self.cloudflare.dns_records(&params.zone).await)
+    }
+
+    #[tool(
+        description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): create or \
+                       update a DNS record, matched on (type, name). Allowed types: \
+                       A/AAAA/CNAME/TXT/MX. POST if absent, else PUT."
+    )]
+    async fn cloudflare_dns_upsert(
+        &self,
+        Parameters(params): Parameters<CloudflareUpsertParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            self.cloudflare
+                .dns_upsert(UpsertParams {
+                    zone: params.zone,
+                    record_type: params.record_type,
+                    name: params.name,
+                    content: params.content,
+                    ttl: params.ttl,
+                    proxied: params.proxied,
+                })
+                .await,
+        )
+    }
+
+    #[tool(
+        description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): delete a DNS \
+                       record by explicit id in a Cloudflare zone."
+    )]
+    async fn cloudflare_dns_delete(
+        &self,
+        Parameters(params): Parameters<CloudflareDeleteParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            self.cloudflare
+                .dns_delete(&params.zone, &params.record_id)
+                .await,
+        )
+    }
+
+    // ---- Domains: RDAP + external DNS verification ----
+
+    #[tool(
+        description = "Registrar, nameservers, status, and expiry for a domain via RDAP \
+                       (Squarespace-registered domains expose no DNS API). Follows one \
+                       redirect to the authoritative registry."
+    )]
+    async fn domain_registrar_status(
+        &self,
+        Parameters(params): Parameters<DomainParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            domains::registrar_status(&self.rdap_client, domains::RDAP_BASE, &params.domain).await,
+        )
+    }
+
+    #[tool(
+        description = "Verify live DNS from the outside. Give `name` (+ optional `type` \
+                       and `values`), or preset:\"fiducia\" to check the GitHub Pages / \
+                       Hetzner edge / Cloudflare-nameserver cutover. Reports per-record \
+                       PASS / PENDING / MISMATCH."
+    )]
+    async fn dns_check(
+        &self,
+        Parameters(params): Parameters<DnsCheckParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let resolver = SystemResolver::new();
+        render(
+            domains::dns_check(
+                &resolver,
+                DnsCheckInput {
+                    name: params.name,
+                    record_type: params.record_type,
+                    values: params.values,
+                    preset: params.preset,
+                },
+            )
+            .await,
+        )
+    }
+
+    // ---- Kubernetes: read-only kubectl (respects KUBECONFIG) ----
+
+    #[tool(description = "List kubectl contexts and mark which are allowed (per \
+                       FIDUCIA_K8S_CONTEXTS). kubectl config get-contexts.")]
+    async fn k8s_contexts(&self) -> Result<CallToolResult, McpError> {
+        render(k8s::contexts().await)
+    }
+
+    #[tool(
+        description = "Deployments/statefulsets (ready/desired + images) and pods \
+                       (phase/restarts/node) in a namespace (default \"fiducia\"). \
+                       Read-only kubectl get -o json."
+    )]
+    async fn k8s_workloads(
+        &self,
+        Parameters(params): Parameters<K8sWorkloadsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(k8s::workloads(&params.context, params.namespace.as_deref().unwrap_or("")).await)
+    }
+
+    #[tool(description = "Current rollout status of a deployment or statefulset \
+                       (non-blocking). kubectl rollout status --watch=false.")]
+    async fn k8s_rollout_status(
+        &self,
+        Parameters(params): Parameters<K8sRolloutParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            k8s::rollout_status(
+                &params.context,
+                &params.kind,
+                &params.name,
+                params.namespace.as_deref().unwrap_or(""),
+            )
+            .await,
+        )
+    }
+
+    #[tool(
+        description = "Most recent events in a namespace (default 30) by lastTimestamp. \
+                       kubectl get events -o json."
+    )]
+    async fn k8s_events(
+        &self,
+        Parameters(params): Parameters<K8sEventsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            k8s::events(
+                &params.context,
+                params.namespace.as_deref().unwrap_or(""),
+                params.last.unwrap_or(0),
+            )
+            .await,
+        )
+    }
+
+    #[tool(description = "Ready and not-ready backend addresses for a service. \
+                       kubectl get endpoints -o json.")]
+    async fn k8s_service_endpoints(
+        &self,
+        Parameters(params): Parameters<K8sServiceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            k8s::service_endpoints(
+                &params.context,
+                params.namespace.as_deref().unwrap_or(""),
+                &params.service,
+            )
+            .await,
+        )
+    }
 }
 
 #[tool_handler]
@@ -289,7 +574,11 @@ impl ServerHandler for FiduciaMcp {
                  reachable and env credentials: `cluster_status`/`cluster_nodes`/\
                  `placement`/`route_key` hit the brain, `node_status`/`observe`/\
                  `kv_get`/`lock_get`/`services` hit a node, `file_lease` hits the \
-                 ai-agent control plane. Nothing here mutates cluster state."
+                 ai-agent control plane. `cloudflare_*` manage DNS (CLOUDFLARE_API_TOKEN); \
+                 `domain_registrar_status`/`dns_check` verify domains from outside; \
+                 `k8s_*` run read-only kubectl. The ONLY tools that mutate anything are \
+                 `cloudflare_dns_upsert`/`cloudflare_dns_delete`, and only when \
+                 FIDUCIA_MCP_ALLOW_MUTATIONS=1; everything else is read-only."
                     .to_string(),
             )
     }
@@ -319,10 +608,21 @@ mod tests {
             "lock_get",
             "services",
             "file_lease",
+            "cloudflare_zones",
+            "cloudflare_dns_records",
+            "cloudflare_dns_upsert",
+            "cloudflare_dns_delete",
+            "domain_registrar_status",
+            "dns_check",
+            "k8s_contexts",
+            "k8s_workloads",
+            "k8s_rollout_status",
+            "k8s_events",
+            "k8s_service_endpoints",
         ] {
             assert!(router.has_route(tool), "missing tool {tool}");
         }
-        assert_eq!(router.list_all().len(), 11);
+        assert_eq!(router.list_all().len(), 22);
     }
 
     #[test]

@@ -382,6 +382,183 @@ impl FiduciaMcp {
                 .await,
         )
     }
+
+    // ---- Cloudflare DNS (needs CLOUDFLARE_API_TOKEN) ----
+
+    #[tool(
+        description = "List Cloudflare zones on the account: name, id, status, \
+                       nameservers. GET Cloudflare /zones."
+    )]
+    async fn cloudflare_zones(&self) -> Result<CallToolResult, McpError> {
+        render(self.cloudflare.zones().await)
+    }
+
+    #[tool(
+        description = "List DNS records in a Cloudflare zone (accepts a zone name or \
+                       id), following pagination → [{id,type,name,content,proxied,ttl}]."
+    )]
+    async fn cloudflare_dns_records(
+        &self,
+        Parameters(params): Parameters<CloudflareZoneParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(self.cloudflare.dns_records(&params.zone).await)
+    }
+
+    #[tool(
+        description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): create or \
+                       update a DNS record, matched on (type, name). Allowed types: \
+                       A/AAAA/CNAME/TXT/MX. POST if absent, else PUT."
+    )]
+    async fn cloudflare_dns_upsert(
+        &self,
+        Parameters(params): Parameters<CloudflareUpsertParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            self.cloudflare
+                .dns_upsert(UpsertParams {
+                    zone: params.zone,
+                    record_type: params.record_type,
+                    name: params.name,
+                    content: params.content,
+                    ttl: params.ttl,
+                    proxied: params.proxied,
+                })
+                .await,
+        )
+    }
+
+    #[tool(
+        description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): delete a DNS \
+                       record by explicit id in a Cloudflare zone."
+    )]
+    async fn cloudflare_dns_delete(
+        &self,
+        Parameters(params): Parameters<CloudflareDeleteParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            self.cloudflare
+                .dns_delete(&params.zone, &params.record_id)
+                .await,
+        )
+    }
+
+    // ---- Domains: RDAP + external DNS verification ----
+
+    #[tool(
+        description = "Registrar, nameservers, status, and expiry for a domain via RDAP \
+                       (Squarespace-registered domains expose no DNS API). Follows one \
+                       redirect to the authoritative registry."
+    )]
+    async fn domain_registrar_status(
+        &self,
+        Parameters(params): Parameters<DomainParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            domains::registrar_status(&self.rdap_client, domains::RDAP_BASE, &params.domain).await,
+        )
+    }
+
+    #[tool(
+        description = "Verify live DNS from the outside. Give `name` (+ optional `type` \
+                       and `values`), or preset:\"fiducia\" to check the GitHub Pages / \
+                       Hetzner edge / Cloudflare-nameserver cutover. Reports per-record \
+                       PASS / PENDING / MISMATCH."
+    )]
+    async fn dns_check(
+        &self,
+        Parameters(params): Parameters<DnsCheckParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let resolver = SystemResolver::new();
+        render(
+            domains::dns_check(
+                &resolver,
+                DnsCheckInput {
+                    name: params.name,
+                    record_type: params.record_type,
+                    values: params.values,
+                    preset: params.preset,
+                },
+            )
+            .await,
+        )
+    }
+
+    // ---- Kubernetes: read-only kubectl (respects KUBECONFIG) ----
+
+    #[tool(
+        description = "List kubectl contexts and mark which are allowed (per \
+                       FIDUCIA_K8S_CONTEXTS). kubectl config get-contexts."
+    )]
+    async fn k8s_contexts(&self) -> Result<CallToolResult, McpError> {
+        render(k8s::contexts().await)
+    }
+
+    #[tool(
+        description = "Deployments/statefulsets (ready/desired + images) and pods \
+                       (phase/restarts/node) in a namespace (default \"fiducia\"). \
+                       Read-only kubectl get -o json."
+    )]
+    async fn k8s_workloads(
+        &self,
+        Parameters(params): Parameters<K8sWorkloadsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(k8s::workloads(&params.context, params.namespace.as_deref().unwrap_or("")).await)
+    }
+
+    #[tool(
+        description = "Current rollout status of a deployment or statefulset \
+                       (non-blocking). kubectl rollout status --watch=false."
+    )]
+    async fn k8s_rollout_status(
+        &self,
+        Parameters(params): Parameters<K8sRolloutParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            k8s::rollout_status(
+                &params.context,
+                &params.kind,
+                &params.name,
+                params.namespace.as_deref().unwrap_or(""),
+            )
+            .await,
+        )
+    }
+
+    #[tool(
+        description = "Most recent events in a namespace (default 30) by lastTimestamp. \
+                       kubectl get events -o json."
+    )]
+    async fn k8s_events(
+        &self,
+        Parameters(params): Parameters<K8sEventsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            k8s::events(
+                &params.context,
+                params.namespace.as_deref().unwrap_or(""),
+                params.last.unwrap_or(0),
+            )
+            .await,
+        )
+    }
+
+    #[tool(
+        description = "Ready and not-ready backend addresses for a service. \
+                       kubectl get endpoints -o json."
+    )]
+    async fn k8s_service_endpoints(
+        &self,
+        Parameters(params): Parameters<K8sServiceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        render(
+            k8s::service_endpoints(
+                &params.context,
+                params.namespace.as_deref().unwrap_or(""),
+                &params.service,
+            )
+            .await,
+        )
+    }
 }
 
 #[tool_handler]

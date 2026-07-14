@@ -1,2 +1,16 @@
 /target
 tmp/
+
+# --- hardened baseline (auto) ---
+/target
+target/
+**/*.rs.bk
+*.pdb
+.cargo-target-*/
+.DS_Store
+*.log
+*.swp
+tmp/
+.env
+.env.*
+!.env.example

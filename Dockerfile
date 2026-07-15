@@ -3,7 +3,7 @@
 # Build context is this repository. The sibling client path dependency is
 # fetched at an immutable commit so standalone builds remain reproducible and
 # do not depend on a moving local checkout.
-FROM rust:1.97.0-slim-bookworm@sha256:cfbb0e0ef7a73e736386bfa346f1cb0503c6d162969dc9426fb37834f3f64c25 AS build
+FROM rust:1.97.0-slim-bookworm@sha256:6d220bf85c74e842a79da63997af8d2e74455c0b8847d8bb3a5888572334991d AS build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates
 WORKDIR /workspace

@@ -1,9 +1,7 @@
 version: 2
 updates:
-  - package-ecosystem: cargo
-    directory: "/"
-    schedule:
-      interval: weekly
+  # Cargo Dependabot cannot materialize the required ../fiducia-clients path
+  # dependency. CI runs cargo audit against the lockfile instead.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

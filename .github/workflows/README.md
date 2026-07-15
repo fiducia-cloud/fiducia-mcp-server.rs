@@ -10,6 +10,9 @@ GitHub Actions for the read-only Fiducia MCP diagnostics server.
   credentials, cancels superseded runs, and has a bounded runtime.
 - This repository never deploys infrastructure. Cluster deployment belongs to
   `fiducia-monorepo`; the MCP server remains a diagnostics surface.
+- Dependabot tracks Actions and Docker bases. Cargo updates stay guarded by the
+  lockfile-backed `cargo audit` gate because GitHub's updater cannot materialize
+  the required sibling `../fiducia-clients` path dependency.
 
 ## Security baseline
 

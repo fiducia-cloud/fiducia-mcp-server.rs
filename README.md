@@ -155,8 +155,22 @@ repos live side by side under the `fiducia.cloud` workspace or as
 `fiducia-monorepo/apps/*` submodules).
 
 ```sh
-cargo test
-cargo run   # then paste MCP JSON-RPC on stdin, e.g. an initialize request
+cargo test --locked
+cargo run --locked   # then paste MCP JSON-RPC on stdin, e.g. an initialize request
 ```
+
+## Container
+
+Build from this repository; the Docker build reproduces the sibling client
+dependency at its reviewed commit:
+
+```sh
+docker build --tag fiducia-mcp:local .
+```
+
+The runtime is an explicit non-root tool runner (UID/GID 65532) because the
+read-only Kubernetes diagnostics invoke a checksum-verified `kubectl`. The MCP
+server still communicates over stdio, and its stdout remains reserved for the
+MCP protocol.
 
 Built on the official Rust MCP SDK ([rmcp](https://crates.io/crates/rmcp)).

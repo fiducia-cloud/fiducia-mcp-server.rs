@@ -30,7 +30,7 @@ jobs:
         with:
           persist-credentials: false
           repository: fiducia-cloud/fiducia-clients
-          ref: 3322e4dcd2b895e254cbefbf837fbfb752e2e70b
+          ref: 1ef817529e13613c1df60396daecc8854450712e
           path: fiducia-clients
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -48,6 +48,9 @@ jobs:
       - name: Test
         working-directory: fiducia-mcp-server.rs
         run: cargo test --locked --all-targets
+      - name: Build non-root tool-runner image
+        working-directory: fiducia-mcp-server.rs
+        run: docker build --tag "fiducia-mcp:${GITHUB_SHA}" .
       - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
         with:
           tool: cargo-audit@0.22.2

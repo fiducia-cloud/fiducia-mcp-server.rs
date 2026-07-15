@@ -4,7 +4,8 @@ GitHub Actions for the read-only Fiducia MCP diagnostics server.
 
 - `ci.yml` checks out the MCP server and its sibling `fiducia-clients` path
   dependency at reviewed commit SHAs, then runs formatting, warnings-as-errors
-  Clippy, locked tests, and `cargo audit`.
+  Clippy, locked tests, a complete non-root tool-runner image build, and
+  `cargo audit`.
 - The workflow has read-only repository permissions, discards checkout
   credentials, cancels superseded runs, and has a bounded runtime.
 - This repository never deploys infrastructure. Cluster deployment belongs to

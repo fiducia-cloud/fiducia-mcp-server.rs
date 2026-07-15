@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+          path: fiducia-mcp-server.rs
+      - name: Validate GitHub Actions
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: fiducia-mcp-server.rs/.github/workflows/ci.yml
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+          repository: fiducia-cloud/fiducia-clients
+          ref: 3322e4dcd2b895e254cbefbf837fbfb752e2e70b
+          path: fiducia-clients
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: fiducia-mcp-server.rs
+      - name: Format
+        working-directory: fiducia-mcp-server.rs
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        working-directory: fiducia-mcp-server.rs
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        working-directory: fiducia-mcp-server.rs
+        run: cargo test --locked --all-targets
+      - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+        with:
+          tool: cargo-audit@0.22.2
+      - name: Dependency audit
+        working-directory: fiducia-mcp-server.rs
+        run: cargo audit

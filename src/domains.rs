@@ -78,8 +78,8 @@ pub trait Resolve: Send + Sync {
 
 // ------------------------------------------------------------------ real resolver
 
-use hickory_resolver::config::{NameServerConfigGroup, ResolverConfig};
-use hickory_resolver::name_server::TokioConnectionProvider;
+use hickory_resolver::config::{ResolverConfig, CLOUDFLARE, GOOGLE};
+use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::proto::rr::RecordType;
 use hickory_resolver::TokioResolver;
 
@@ -100,12 +100,27 @@ impl Default for SystemResolver {
 
 impl SystemResolver {
     pub fn new() -> Self {
-        let primary = TokioResolver::builder_tokio().ok().map(|b| b.build());
-        let mut group = NameServerConfigGroup::cloudflare();
-        group.merge(NameServerConfigGroup::google());
-        let config = ResolverConfig::from_parts(None, vec![], group);
-        let fallback =
-            TokioResolver::builder_with_config(config, TokioConnectionProvider::default()).build();
+        let primary = match TokioResolver::builder_tokio() {
+            Ok(builder) => match builder.build() {
+                Ok(resolver) => Some(resolver),
+                Err(error) => {
+                    tracing::warn!(%error, "system DNS resolver configuration is unusable; using public fallback");
+                    None
+                }
+            },
+            Err(error) => {
+                tracing::warn!(%error, "system DNS resolver configuration is unavailable; using public fallback");
+                None
+            }
+        };
+        let name_servers = CLOUDFLARE
+            .udp_and_tcp()
+            .chain(GOOGLE.udp_and_tcp())
+            .collect();
+        let config = ResolverConfig::from_parts(None, vec![], name_servers);
+        let fallback = TokioResolver::builder_with_config(config, TokioRuntimeProvider::default())
+            .build()
+            .expect("static fallback DNS configuration must be valid");
         Self { primary, fallback }
     }
 }
@@ -143,9 +158,10 @@ async fn query(resolver: &TokioResolver, name: &str, rt: RecordType) -> QueryOut
     match resolver.lookup(name.to_string(), rt).await {
         Ok(lookup) => {
             let values = lookup
-                .record_iter()
+                .answers()
+                .iter()
                 .filter(|rec| rec.record_type() == rt)
-                .map(|rec| rec.data().to_string().trim_end_matches('.').to_string())
+                .map(|rec| rec.data.to_string().trim_end_matches('.').to_string())
                 .collect();
             QueryOutcome::Values(values)
         }

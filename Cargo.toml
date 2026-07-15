@@ -39,7 +39,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # dns_check: async DNS lookups — system resolver config with a fallback to
 # Cloudflare 1.1.1.1 + Google 8.8.8.8. Abstracted behind `domains::Resolve`
 # so tests inject a mock and stay offline.
-hickory-resolver = "0.25"
+hickory-resolver = "0.26.1"
 
 [dev-dependencies]
 # Offline mock upstreams (Cloudflare API envelope, RDAP redirect hop) bound

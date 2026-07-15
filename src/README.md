@@ -1,6 +1,5 @@
-# MCP server source
+# src
 
-Read-only diagnostic tools and their upstream adapters. The binary's stdout is
-reserved exclusively for MCP JSON-RPC, so diagnostics must go to stderr and
-must never expose credentials. Mutating tools remain prohibited except the two
-explicitly gated Cloudflare DNS operations documented in `AGENTS.md`.
+MCP server internals: `server.rs` (stdio JSON-RPC loop — stdout is the wire,
+so logs go to stderr) and `repo_map.rs` (the fleet knowledge map the tools
+serve). Keep stdout writes confined to the protocol layer.

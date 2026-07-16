@@ -663,6 +663,63 @@ mod tests {
         assert_eq!(neither.is_error, Some(true));
     }
 
+    /// stdout/stdin is the MCP wire: one garbage line from a confused client
+    /// must not kill the service loop. Serve the real handler over an
+    /// in-memory duplex, feed it a non-JSON line followed by a valid
+    /// `initialize` request, and require a correct response to the latter.
+    #[tokio::test]
+    async fn garbage_stdio_line_is_ignored_and_next_request_served() {
+        use rmcp::ServiceExt;
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+        let (client_read, mut client_write) = tokio::io::split(client_io);
+
+        let service = tokio::spawn(async move { server().serve(server_io).await });
+
+        client_write
+            .write_all(b"this is not json {{{\n")
+            .await
+            .unwrap();
+        let init = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": serde_json::to_value(ProtocolVersion::LATEST).unwrap(),
+                "capabilities": {},
+                "clientInfo": { "name": "loop-test", "version": "0.0.0" },
+            },
+        });
+        client_write
+            .write_all(format!("{init}\n").as_bytes())
+            .await
+            .unwrap();
+
+        let mut lines = BufReader::new(client_read).lines();
+        let line = tokio::time::timeout(std::time::Duration::from_secs(10), lines.next_line())
+            .await
+            .expect("server did not answer within deadline")
+            .expect("read error on client side")
+            .expect("server closed the stream after a garbage line");
+        let reply: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(
+            reply["id"], 1,
+            "response must correlate to the valid request"
+        );
+        assert!(
+            reply.get("error").is_none(),
+            "valid initialize after a garbage line must not error: {reply}"
+        );
+        assert_eq!(
+            reply["result"]["serverInfo"]["name"],
+            env!("CARGO_PKG_NAME"),
+            "initialize must return this server's identity"
+        );
+
+        service.abort();
+    }
+
     #[tokio::test]
     async fn missing_credentials_surface_as_tool_error_not_crash() {
         // Default config has no secrets: brain call must return an is_error

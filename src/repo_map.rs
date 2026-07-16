@@ -108,3 +108,46 @@ brain and memory expose /v1/status. No Alertmanager yet.
 fiducia.cloud = GitHub Pages (marketing). app./admin. = Hetzner edge
 95.217.171.250 via dd-remote-gateway.
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::REPO_MAP;
+
+    /// The map is what agents use to orient; if it drifts behind a repo
+    /// rename it actively misroutes them. Pin: the renamed repos appear
+    /// under their CURRENT names, and any mention of a pre-rename name is
+    /// explicitly flagged as renamed/archived/deprecated right where it
+    /// appears.
+    #[test]
+    fn repo_map_uses_renamed_names_and_marks_stale_ones() {
+        for current in ["fiducia-customer.rs", "fiducia-marketing.web"] {
+            assert!(
+                REPO_MAP.contains(current),
+                "repo map must name the renamed repo {current:?}"
+            );
+        }
+
+        let stale = [
+            "fiducia-customer-ui.web",
+            "fiducia-backend.rs",
+            "fiducia-ui.web",
+        ];
+        let markers = ["renamed", "archived", "deprecated", "legacy", "still named"];
+        let lines: Vec<&str> = REPO_MAP.lines().collect();
+        for name in stale {
+            for (i, line) in lines.iter().enumerate() {
+                if !line.contains(name) {
+                    continue;
+                }
+                let window = lines[i.saturating_sub(1)..(i + 2).min(lines.len())]
+                    .join("\n")
+                    .to_ascii_lowercase();
+                assert!(
+                    markers.iter().any(|m| window.contains(m)),
+                    "stale repo name {name:?} appears without a rename/archive \
+                     marker nearby:\n{line}"
+                );
+            }
+        }
+    }
+}

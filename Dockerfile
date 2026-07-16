@@ -25,7 +25,7 @@ RUN cargo build --release --locked --manifest-path fiducia-mcp-server.rs/Cargo.t
 
 # Fetch kubectl in a disposable stage and verify the architecture-specific
 # upstream checksum before it enters the runtime image.
-FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df AS kubectl
+FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS kubectl
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl
 ARG TARGETARCH
@@ -43,7 +43,7 @@ RUN case "$TARGETARCH" in \
 
 # The MCP server shells out to kubectl for its read-only Kubernetes tools, so
 # this is an explicit non-root tool-runner rather than a distroless service.
-FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
+FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 LABEL org.fiducia.runtime-profile="tool-runner-nonroot"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \

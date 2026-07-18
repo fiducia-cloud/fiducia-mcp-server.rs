@@ -124,10 +124,9 @@ impl Config {
 
 pub struct Upstream {
     client: reqwest::Client,
-    /// Official Rust client for the node data plane, present in internal mode
-    /// (secret + org id, no API key). Blocking (ureq), so every call runs on
-    /// spawn_blocking. Bearer mode keeps raw HTTP: fiducia-client has no way
-    /// to attach an Authorization header.
+    /// Official Rust client for the node data plane, present whenever either
+    /// trusted-hop or bearer credentials are configured. It is blocking
+    /// (`ureq`), so every call runs on `spawn_blocking`.
     node_client: Option<Arc<FiduciaClient>>,
     pub config: Config,
 }
@@ -135,11 +134,19 @@ pub struct Upstream {
 impl Upstream {
     pub fn new(config: Config) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(15))
+            // No diagnostic request needs to follow a redirect. In particular,
+            // brain/control-plane trusted-hop headers must never be replayed to
+            // a Location chosen by an upstream peer.
             .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(15))
             .build()
             .expect("reqwest client");
         let node_client = match (&config.api_key, &config.internal_secret, &config.org_id) {
+            (Some(api_key), _, _) if validate_base_url(&config.node_url).is_ok() => {
+                let mut c = FiduciaClient::bearer(&config.node_url, api_key);
+                c.request_timeout = Some(Duration::from_secs(15));
+                Some(Arc::new(c))
+            }
             (None, Some(secret), Some(org)) if validate_base_url(&config.node_url).is_ok() => {
                 let mut c = FiduciaClient::internal(&config.node_url, secret, org);
                 c.request_timeout = Some(Duration::from_secs(15));
@@ -154,30 +161,27 @@ impl Upstream {
         }
     }
 
-    /// Call the node data plane. Internal mode goes through fiducia-client on
-    /// the blocking pool; otherwise (bearer mode, or unconfigured — which
-    /// yields the guidance error from `headers`) falls back to a raw GET of
-    /// `fallback_path`.
-    pub async fn node_call<F>(
-        &self,
-        call: F,
-        fallback_path: &str,
-    ) -> Result<serde_json::Value, String>
+    /// Call the node data plane through the canonical fiducia client on the
+    /// blocking pool. Missing credentials return the same configuration
+    /// guidance as the raw helper, but never create a node-plane HTTP request.
+    pub async fn node_call<F>(&self, call: F) -> Result<serde_json::Value, String>
     where
         F: FnOnce(&FiduciaClient) -> Result<serde_json::Value, fiducia_client::Error>
             + Send
             + 'static,
     {
-        match &self.node_client {
-            Some(node_client) => {
-                let node_client = Arc::clone(node_client);
-                tokio::task::spawn_blocking(move || call(&node_client))
-                    .await
-                    .map_err(|e| format!("node client task failed: {e}"))?
-                    .map_err(format_client_error)
-            }
-            None => self.get_json(Plane::Node, fallback_path).await,
-        }
+        validate_base_url(&self.config.node_url)?;
+        let node_client = self.node_client.as_ref().ok_or_else(|| {
+            self.config
+                .headers(Plane::Node)
+                .err()
+                .unwrap_or_else(|| "authenticated node client was not initialized".to_string())
+        })?;
+        let node_client = Arc::clone(node_client);
+        tokio::task::spawn_blocking(move || call(&node_client))
+            .await
+            .map_err(|e| format!("node client task failed: {e}"))?
+            .map_err(format_client_error)
     }
 
     /// GET `<plane base>/<path_and_query>` with the plane's auth headers and
@@ -352,14 +356,14 @@ mod tests {
     }
 
     #[test]
-    fn node_client_built_in_internal_mode_only() {
+    fn node_client_is_built_for_each_authenticated_node_mode() {
         assert!(Upstream::new(cfg()).node_client.is_some());
 
         let mut bearer = cfg();
         bearer.api_key = Some("fk_live_abc".into());
         assert!(
-            Upstream::new(bearer).node_client.is_none(),
-            "bearer mode must bypass fiducia-client (no Authorization support)"
+            Upstream::new(bearer).node_client.is_some(),
+            "bearer mode must use fiducia-client too"
         );
 
         let mut bare = cfg();

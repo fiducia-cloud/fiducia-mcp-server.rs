@@ -31,11 +31,11 @@ README.md for the tool table and env configuration.
 ## Where things live
 
 - `src/upstream.rs` — env config, per-plane base URLs + auth headers,
-  `get_json` (raw HTTP), and `node_call`: node data-plane calls go through
-  the official `fiducia-client` crate (path dep `../fiducia-clients/clients/rust`,
-  blocking ureq → `spawn_blocking`) in internal mode, falling back to raw
-  HTTP for bearer mode and `/v1/observe/*` (no client coverage). Prefer
-  extending via `fiducia-client` methods when they exist.
+  `get_json` (raw HTTP), and `node_call`: authenticated node data-plane calls
+  go through the official `fiducia-client` crate (path dep
+  `../fiducia-clients/clients/rust`, blocking ureq → `spawn_blocking`) in both
+  trusted-hop and bearer modes. Prefer extending `fiducia-client` instead of
+  adding node-plane raw HTTP fallbacks.
 - `src/server.rs` — the `#[tool_router]` impl; one tool per question.
   Upstream failures return `CallToolResult::error(...)`, not `Err(...)`, so
   the model sees the message and can react.

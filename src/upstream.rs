@@ -126,10 +126,9 @@ impl Config {
 
 pub struct Upstream {
     client: reqwest::Client,
-    /// Official Rust client for the node data plane, present in internal mode
-    /// (secret + org id, no API key). Blocking (ureq), so every call runs on
-    /// spawn_blocking. Bearer mode keeps raw HTTP: fiducia-client has no way
-    /// to attach an Authorization header.
+    /// Official Rust client for the node data plane, present whenever either
+    /// trusted-hop or bearer credentials are configured. It is blocking
+    /// (`ureq`), so every call runs on `spawn_blocking`.
     node_client: Option<Arc<FiduciaClient>>,
     pub config: Config,
 }
@@ -137,10 +136,19 @@ pub struct Upstream {
 impl Upstream {
     pub fn new(config: Config) -> Self {
         let client = reqwest::Client::builder()
+            // No diagnostic request needs to follow a redirect. In particular,
+            // brain/control-plane trusted-hop headers must never be replayed to
+            // a Location chosen by an upstream peer.
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(15))
             .build()
             .expect("reqwest client");
         let node_client = match (&config.api_key, &config.internal_secret, &config.org_id) {
+            (Some(api_key), _, _) => {
+                let mut c = FiduciaClient::bearer(&config.node_url, api_key);
+                c.request_timeout = Some(Duration::from_secs(15));
+                Some(Arc::new(c))
+            }
             (None, Some(secret), Some(org)) => {
                 let mut c = FiduciaClient::internal(&config.node_url, secret, org);
                 c.request_timeout = Some(Duration::from_secs(15));
@@ -155,10 +163,9 @@ impl Upstream {
         }
     }
 
-    /// Call the node data plane. Internal mode goes through fiducia-client on
-    /// the blocking pool; otherwise (bearer mode, or unconfigured — which
-    /// yields the guidance error from `headers`) falls back to a raw GET of
-    /// `fallback_path`.
+    /// Call the node data plane through the canonical fiducia client on the
+    /// blocking pool. The raw fallback is only for an unconfigured client,
+    /// where `headers` returns the credential-guidance error before sending.
     pub async fn node_call<F>(
         &self,
         call: F,
@@ -318,14 +325,14 @@ mod tests {
     }
 
     #[test]
-    fn node_client_built_in_internal_mode_only() {
+    fn node_client_is_built_for_each_authenticated_node_mode() {
         assert!(Upstream::new(cfg()).node_client.is_some());
 
         let mut bearer = cfg();
         bearer.api_key = Some("fk_live_abc".into());
         assert!(
-            Upstream::new(bearer).node_client.is_none(),
-            "bearer mode must bypass fiducia-client (no Authorization support)"
+            Upstream::new(bearer).node_client.is_some(),
+            "bearer mode must use fiducia-client too"
         );
 
         let mut bare = cfg();

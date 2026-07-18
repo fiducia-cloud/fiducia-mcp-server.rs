@@ -283,9 +283,10 @@ impl FiduciaMcp {
                 "unknown observe kind {what:?}; expected one of {OBSERVE_KINDS:?}"
             )));
         }
+        let path = format!("/v1/observe/{what}");
         render(
             self.upstream
-                .get_json(Plane::Node, &format!("/v1/observe/{what}"))
+                .node_call(move |c| c.observe(&what), &path)
                 .await,
         )
     }

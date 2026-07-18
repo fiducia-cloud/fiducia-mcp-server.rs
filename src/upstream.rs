@@ -164,28 +164,25 @@ impl Upstream {
     }
 
     /// Call the node data plane through the canonical fiducia client on the
-    /// blocking pool. The raw fallback is only for an unconfigured client,
-    /// where `headers` returns the credential-guidance error before sending.
-    pub async fn node_call<F>(
-        &self,
-        call: F,
-        fallback_path: &str,
-    ) -> Result<serde_json::Value, String>
+    /// blocking pool. Missing credentials return the same configuration
+    /// guidance as the raw helper, but never create a node-plane HTTP request.
+    pub async fn node_call<F>(&self, call: F) -> Result<serde_json::Value, String>
     where
         F: FnOnce(&FiduciaClient) -> Result<serde_json::Value, fiducia_client::Error>
             + Send
             + 'static,
     {
-        match &self.node_client {
-            Some(node_client) => {
-                let node_client = Arc::clone(node_client);
-                tokio::task::spawn_blocking(move || call(&node_client))
-                    .await
-                    .map_err(|e| format!("node client task failed: {e}"))?
-                    .map_err(format_client_error)
-            }
-            None => self.get_json(Plane::Node, fallback_path).await,
-        }
+        let node_client = self.node_client.as_ref().ok_or_else(|| {
+            self.config
+                .headers(Plane::Node)
+                .err()
+                .unwrap_or_else(|| "authenticated node client was not initialized".to_string())
+        })?;
+        let node_client = Arc::clone(node_client);
+        tokio::task::spawn_blocking(move || call(&node_client))
+            .await
+            .map_err(|e| format!("node client task failed: {e}"))?
+            .map_err(format_client_error)
     }
 
     /// GET `<plane base>/<path_and_query>` with the plane's auth headers and

@@ -454,6 +454,7 @@ dependencies = [
 [[package]]
 name = "fiducia-interfaces"
 version = "0.1.0"
+source = "git+https://github.com/fiducia-cloud/fiducia-interfaces.git?rev=e3dba39566e036ad61de91e2e6c1d625ec2b5411#e3dba39566e036ad61de91e2e6c1d625ec2b5411"
 dependencies = [
  "serde",
  "serde_json",

@@ -287,7 +287,7 @@ impl FiduciaMcp {
         }
         render(
             self.upstream
-                .get_json(Plane::Node, &format!("/v1/observe/{what}"))
+                .node_call(move |client| client.observe(&what), "/v1/observe")
                 .await,
         )
     }

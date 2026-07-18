@@ -29,14 +29,8 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-          repository: fiducia-cloud/fiducia-interfaces
-          ref: 67d1b4c33bcbafc7a027830e4da3afa1a1a0f137
-          path: fiducia-interfaces
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-        with:
-          persist-credentials: false
           repository: fiducia-cloud/fiducia-clients
-          ref: 1ef817529e13613c1df60396daecc8854450712e
+          ref: 3508eadf668daedd5bdc436388d7f8279629563c
           path: fiducia-clients
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:

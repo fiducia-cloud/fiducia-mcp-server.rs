@@ -19,9 +19,9 @@ moving shards, releasing leases — deliberately stay with the real clients
 
 Node data-plane tools (`node_status`, `kv_get`, `lock_get`, `services`) go
 through the official Rust client — `fiducia-client`, a path dependency on the
-sibling checkout `../fiducia-clients/clients/rust` — in internal mode.
-`observe` (no client coverage), brain, the agent control plane, and bearer
-mode (the client cannot attach `Authorization`) use plain HTTP.
+sibling checkout `../fiducia-clients/clients/rust` — in both internal and
+bearer modes. `observe` uses the same client. Plain HTTP remains only for the
+brain, agent control plane, Cloudflare, RDAP, and other non-node APIs.
 
 | Tool | Upstream | What it answers |
 |---|---|---|

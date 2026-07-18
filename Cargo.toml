@@ -34,9 +34,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"]
 # Sibling-checkout path dep, the org convention (cf. fiducia-interfaces).
 fiducia-client = { path = "../fiducia-clients/clients/rust" }
 
-# Talking to brain (:8095), the ai-agent control plane, node /v1/observe/*
-# (not part of the official client surface), the LB in bearer mode, the
-# Cloudflare v4 API, and RDAP servers.
+# Talking to brain (:8095), the ai-agent control plane, Cloudflare v4, and RDAP
+# servers. All node data-plane reads use fiducia-client in both auth modes.
 # rustls so the server can also point at the LB over HTTPS.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 

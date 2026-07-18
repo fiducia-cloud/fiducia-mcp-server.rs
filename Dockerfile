@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates
 WORKDIR /workspace
 ARG INTERFACES_REF=67d1b4c33bcbafc7a027830e4da3afa1a1a0f137
-ARG CLIENTS_REF=1ef817529e13613c1df60396daecc8854450712e
+ARG CLIENTS_REF=3508eadf668daedd5bdc436388d7f8279629563c
 RUN git init fiducia-interfaces \
     && git -C fiducia-interfaces remote add origin https://github.com/fiducia-cloud/fiducia-interfaces.git \
     && git -C fiducia-interfaces fetch --depth 1 origin "$INTERFACES_REF" \

@@ -124,10 +124,9 @@ impl Config {
 
 pub struct Upstream {
     client: reqwest::Client,
-    /// Official Rust client for the node data plane, present in internal mode
-    /// (secret + org id, no API key). It is blocking (`ureq`), so every call
-    /// runs on `spawn_blocking`. Bearer mode uses the hardened reqwest client
-    /// because the pinned canonical client has no bearer constructor.
+    /// Official Rust client for the node data plane in either internal or
+    /// bearer mode. It is blocking (`ureq`), so every call runs on
+    /// `spawn_blocking`.
     node_client: Option<Arc<FiduciaClient>>,
     pub config: Config,
 }
@@ -143,6 +142,11 @@ impl Upstream {
             .build()
             .expect("reqwest client");
         let node_client = match (&config.api_key, &config.internal_secret, &config.org_id) {
+            (Some(api_key), _, _) if validate_base_url(&config.node_url).is_ok() => {
+                let mut c = FiduciaClient::bearer(&config.node_url, api_key);
+                c.request_timeout = Some(Duration::from_secs(15));
+                Some(Arc::new(c))
+            }
             (None, Some(secret), Some(org)) if validate_base_url(&config.node_url).is_ok() => {
                 let mut c = FiduciaClient::internal(&config.node_url, secret, org);
                 c.request_timeout = Some(Duration::from_secs(15));
@@ -157,9 +161,10 @@ impl Upstream {
         }
     }
 
-    /// Call the node data plane. Internal mode goes through fiducia-client on
-    /// the blocking pool; otherwise bearer mode (or an unconfigured server,
-    /// which yields guidance from `headers`) uses the hardened raw GET path.
+    /// Call the node data plane through `fiducia-client` on the blocking pool.
+    /// An unconfigured server falls back only to produce the existing
+    /// credential guidance from `headers` without attempting an unauthenticated
+    /// SDK request.
     pub async fn node_call<F>(
         &self,
         call: F,
@@ -355,14 +360,14 @@ mod tests {
     }
 
     #[test]
-    fn node_client_is_built_for_internal_mode_only() {
+    fn node_client_is_built_for_internal_and_bearer_modes() {
         assert!(Upstream::new(cfg()).node_client.is_some());
 
         let mut bearer = cfg();
         bearer.api_key = Some("fk_live_abc".into());
         assert!(
-            Upstream::new(bearer).node_client.is_none(),
-            "bearer mode must use the redirect-safe reqwest client"
+            Upstream::new(bearer).node_client.is_some(),
+            "bearer mode must use the canonical SDK"
         );
 
         let mut bare = cfg();

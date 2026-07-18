@@ -64,20 +64,18 @@ impl Config {
     }
 
     pub fn base_url(&self, plane: Plane) -> Result<&str, String> {
-        match plane {
-            Plane::Node => Ok(self.node_url.trim_end_matches('/')),
-            Plane::Brain => Ok(self.brain_url.trim_end_matches('/')),
-            Plane::AgentControlPlane => self
-                .agent_cp_url
-                .as_deref()
-                .map(|u| u.trim_end_matches('/'))
-                .ok_or_else(|| {
-                    format!(
-                        "{AGENT_CP_URL_ENV} is not set; point it at the \
+        let url = match plane {
+            Plane::Node => self.node_url.as_str(),
+            Plane::Brain => self.brain_url.as_str(),
+            Plane::AgentControlPlane => self.agent_cp_url.as_deref().ok_or_else(|| {
+                format!(
+                    "{AGENT_CP_URL_ENV} is not set; point it at the \
                          fiducia-ai-agent-control-plane base URL to use file-lease tools"
-                    )
-                }),
-        }
+                )
+            })?,
+        };
+        validate_base_url(url)?;
+        Ok(url.trim_end_matches('/'))
     }
 
     /// Headers to attach for a given plane, as (name, value) pairs.
@@ -138,10 +136,11 @@ impl Upstream {
     pub fn new(config: Config) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("reqwest client");
         let node_client = match (&config.api_key, &config.internal_secret, &config.org_id) {
-            (None, Some(secret), Some(org)) => {
+            (None, Some(secret), Some(org)) if validate_base_url(&config.node_url).is_ok() => {
                 let mut c = FiduciaClient::internal(&config.node_url, secret, org);
                 c.request_timeout = Some(Duration::from_secs(15));
                 Some(Arc::new(c))
@@ -213,6 +212,41 @@ impl Upstream {
             Err(format!("{url} returned {status}: {json}"))
         }
     }
+}
+
+fn validate_base_url(raw: &str) -> Result<(), String> {
+    let raw = raw.trim();
+    if raw.len() > 2_048 || raw.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("upstream base URL contains invalid characters".to_string());
+    }
+    let parsed =
+        reqwest::Url::parse(raw).map_err(|_| "upstream base URL is invalid".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host().is_none() {
+        return Err("upstream base URL must use http(s) and include a host".to_string());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("upstream base URL must not contain credentials".to_string());
+    }
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err("upstream base URL must not contain a query or fragment".to_string());
+    }
+    let host = parsed.host_str().unwrap_or_default();
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        let blocked = match ip {
+            std::net::IpAddr::V4(ip) => ip.is_link_local() || ip.is_unspecified(),
+            std::net::IpAddr::V6(ip) => ip.is_unicast_link_local() || ip.is_unspecified(),
+        };
+        if blocked {
+            return Err("cloud metadata endpoints are not allowed".to_string());
+        }
+    }
+    if matches!(
+        host.trim_end_matches('.').to_ascii_lowercase().as_str(),
+        "metadata.google.internal" | "metadata.azure.internal"
+    ) {
+        return Err("cloud metadata endpoints are not allowed".to_string());
+    }
+    Ok(())
 }
 
 /// Render a fiducia-client error the same way `get_json` renders raw HTTP

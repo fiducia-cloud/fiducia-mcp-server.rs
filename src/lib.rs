@@ -7,4 +7,5 @@ pub mod domains;
 pub mod k8s;
 pub mod repo_map;
 pub mod server;
+pub mod telemetry;
 pub mod upstream;

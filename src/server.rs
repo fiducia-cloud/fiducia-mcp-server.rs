@@ -5,7 +5,7 @@
 //! fiducia-cli) where fencing tokens are handled properly.
 
 use rmcp::{
-    handler::server::wrapper::Parameters,
+    handler::server::{tool::ToolRouter, wrapper::Parameters},
     model::{
         CallToolResult, ContentBlock, Implementation, ProtocolVersion, ServerCapabilities,
         ServerInfo,
@@ -180,6 +180,7 @@ pub struct FiduciaMcp {
     /// Dedicated client for RDAP: redirects disabled so we follow exactly one
     /// hop from the bootstrap server ourselves.
     rdap_client: reqwest::Client,
+    tool_router: ToolRouter<Self>,
 }
 
 fn ok_json(value: serde_json::Value) -> CallToolResult {
@@ -210,6 +211,7 @@ impl FiduciaMcp {
             upstream: Arc::new(upstream),
             cloudflare: Arc::new(Cloudflare::from_env()),
             rdap_client,
+            tool_router: crate::telemetry::instrument_tool_router(Self::tool_router()),
         }
     }
 
@@ -555,7 +557,7 @@ impl FiduciaMcp {
     }
 }
 
-#[tool_handler]
+#[tool_handler(router = self.tool_router)]
 impl ServerHandler for FiduciaMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())

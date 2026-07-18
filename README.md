@@ -174,3 +174,11 @@ server still communicates over stdio, and its stdout remains reserved for the
 MCP protocol.
 
 Built on the official Rust MCP SDK ([rmcp](https://crates.io/crates/rmcp)).
+
+## OpenTelemetry
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` to export explicit OTLP/gRPC traces and
+metrics; use `RUST_LOG` for filtering. Each MCP tool call gets a named span,
+call counter, duration histogram, and error flag. Arguments, results, and
+secrets are never recorded. JSON logs stay on stderr and stdout stays reserved
+for MCP framing. Instrumentation is explicit Rust code—no monkey patching.

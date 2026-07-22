@@ -51,7 +51,7 @@ jobs:
       - name: Build non-root tool-runner image
         working-directory: fiducia-mcp-server.rs
         run: docker build --tag "fiducia-mcp:${GITHUB_SHA}" .
-      - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+      - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
           tool: cargo-audit@0.22.2
       - name: Dependency audit

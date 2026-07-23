@@ -14,3 +14,6 @@ tmp/
 .env
 .env.*
 !.env.example
+
+# direnv-generated Nix dev-shell cache
+.direnv/

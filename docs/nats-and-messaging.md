@@ -13,9 +13,21 @@ invariants the code assumes, and the hardening posture.
 | fiducia-lambda-service.rs | JetStream lifecycle publishes + Core-NATS container-pool request/reply |
 | fiducia-ai-agent-manager.rs | durable file outbox → JetStream, Core-NATS for disposable live progress |
 
-`fiducia-infra` deploys no NATS server; broker config lives out-of-band
-(see "Broker-side invariants" — these must be enforced wherever the server
-is provisioned).
+## Where the broker actually runs
+
+- **Remote-dev (AWS EC2 + Hetzner dd-cluster)**: `dd-nats` in the `messaging`
+  namespace, GitOps-managed from `ores/k8s-cluster/remote/argocd/messaging/`
+  (outside this org's workspace). JetStream file store on hostPath. Its own
+  README documents the open hardening backlog: no auth, no TLS, no
+  NetworkPolicy — tolerated only because settlement broadcast is env-gated
+  off; locking it down requires a deliberate cluster-wide rollout with the
+  full pub/sub inventory.
+- **fiducia 3-cluster sim (hetzner/vultr/civo)**: `fiducia-nats` under
+  `fiducia-infra/base/messaging/` — hardened variant: PVC-backed JetStream,
+  fail-closed auth from the `fiducia-nats-auth` Secret, NetworkPolicy
+  confinement, per-cluster storageClass via the generated overlays.
+- Streams are provisioned by the relay (`ensure_stream`), not broker config;
+  the broker only needs JetStream enabled with file storage.
 
 ## Design (the parts to preserve)
 

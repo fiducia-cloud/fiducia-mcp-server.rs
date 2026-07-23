@@ -8,6 +8,13 @@ without cloning every repo.
 Binary: `fiducia-mcp` — speaks MCP over **stdio** (stdout is the wire; all
 logs go to stderr).
 
+Platform reference docs live in [`docs/`](docs/): where secrets/KV are
+persisted and how consumers ingest them ([secrets-and-kv.md](docs/secrets-and-kv.md)),
+NATS/JetStream design + hardening invariants ([nats-and-messaging.md](docs/nats-and-messaging.md)),
+and the admin/customer MASH web stacks + browser testing
+([web-stacks-and-testing.md](docs/web-stacks-and-testing.md)). The same facts
+in condensed form are served live by the `repo_map` tool.
+
 ## Tools
 
 Tools are **read-only by default**. The *only* exceptions are two Cloudflare

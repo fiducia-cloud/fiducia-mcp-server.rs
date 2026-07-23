@@ -16,6 +16,9 @@ multi-Raft.
   CockroachDB/Postgres = state. There is no "fiducia-mq".
 - Every mutation that matters is fenced: lock grants carry fencing tokens and
   downstream systems must check them.
+- Messaging is effectively-once = fencing token + tenant-scoped idempotency
+  key over at-least-once JetStream; broker MUST run duplicate_window >= 600s
+  (= claim_ttl + max publish backoff), file storage, TLS + authed connects.
 - Vectors suggest, never control, authoritative state (fiducia-memory).
 
 ## Request path
@@ -47,9 +50,11 @@ Data/control plane (Rust):
 Identity, customer, admin:
 - fiducia-auth.rs — Supabase dashboard sessions + B2B API keys (hashed),
   cached introspection (POST /v1/introspect, x-server-auth), key->JWT exchange.
-- fiducia-customer.rs — canonical customer web app + BFF (Rust MASH: Maud,
-  Axum, SeaORM/Supabase, HTMX). Crate/image/k8s still named fiducia-backend.
-- fiducia-admin.rs — operator-only admin dashboard (accounts, API keys, infra).
+- fiducia-customer.rs — canonical customer web app + BFF (:8080; Rust MASH:
+  Maud, Axum, SeaORM/Supabase, HTMX; custom WS /app/ws + SSE /app/events).
+  Crate/image/k8s still named fiducia-backend.
+- fiducia-admin.rs — operator-only admin dashboard (:8096; same MASH stack;
+  WS /admin/ws streams fiducia-sync change frames). Accounts, API keys, infra.
 - fiducia-marketing.web — static Astro marketing site (GitHub Pages +
   synced fallback into fiducia-customer.rs/static/).
 - fiducia-customer-ui.web — ARCHIVED legacy SPA; do not touch.
@@ -69,10 +74,19 @@ Messaging, clients, interfaces:
 - fiducia-messaging.rs / fiducia-messaging — versioned NATS envelopes with
   transactional Postgres outbox/inbox.
 - fiducia-clients — official HTTP client libraries in 12 languages; the Rust
-  crate is fiducia-client at clients/rust (blocking, ureq).
+  crate is fiducia-client at clients/rust (blocking, ureq). The TS/Dart/Rust
+  clients also expose local-first sync write/pull adapters (canonical sync
+  schema from fiducia-interfaces).
 - fiducia-interfaces — JSON Schema (typed-IO) + canonical SQL, codegen to
-  Rust/TS/Python/Go; generated/rust is a common path dependency.
-- fiducia-sync — local-first sync SDK (@fiducia/sync), Rust core -> WASM.
+  Rust/TS/Python/Go; generated/rust is a common path dependency. Includes the
+  canonical sync contracts (SyncChangeEvent, SyncQueuedWrite,
+  SyncWriteAcknowledgement, SyncPullPage) in schema/sync.schema.json.
+- fiducia-sync — cross-platform local-first sync library: fiducia-sync-core
+  (zero-IO Rust reconcile/conflict/ack rules, native + WASM), crates/postgres
+  (SeaORM change-journal adapter + RLS/triggers/PostgREST RPC),
+  @fiducia/sync browser SDK (IndexedDB write queue, Supabase Realtime +
+  backend WS/SSE transports, hx-ext="fiducia-optimistic" HTMX extension),
+  and the fiducia_sync Dart/Flutter package (SQLite + Supabase).
 - fiducia-cli.rs — `fiducia` CLI (closest-region probe, data-plane calls).
 - fiducia-telemetry.rs — shared OpenTelemetry init for services (stdout/OTLP;
   NOT used by this MCP server because stdout is the MCP wire).
@@ -96,6 +110,21 @@ Infra, testing, meta:
 - fiducia-auth introspection: header x-server-auth = FIDUCIA_INTROSPECT_SECRET.
 - External clients: Authorization: Bearer <api key or JWT> at the LB; the LB
   strips any client-supplied internal headers.
+
+## Secrets & KV persistence
+
+Customer secrets/config live in fiducia's OWN Raft-replicated KV
+(fiducia-node.rs /v1/kv) — NOT Supabase/Postgres/Redis. Durability: fsync'd
+Raft log + snapshots under FIDUCIA_DATA_DIR (default /var/lib/fiducia), a
+10Gi PVC per node in k8s (fiducia-infra base/node/statefulset.yaml). Values
+are sealed BEFORE entering the Raft log (log, snapshots, and memory hold
+ciphertext); backends (exactly one, fail-closed): HashiCorp Vault Transit
+(FIDUCIA_KV_VAULT_*) or local AES-256-GCM keyring
+(FIDUCIA_KV_ENCRYPTION_KEYS + _ACTIVE_KEY_ID). Operator runbook:
+fiducia-infra/docs/kv-protection.md. Keys are org-scoped; consumers read
+GET /v1/kv?key=... or subscribe ?watch=true (SSE). Dogfooding: fiducia-auth
+stores hashed API keys in this same KV under __auth/ (data plane never
+touches Supabase; Supabase = dashboard identity/sessions only).
 
 ## Observability
 

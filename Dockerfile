@@ -7,8 +7,8 @@ FROM rust:1.97.1-slim-bookworm@sha256:99e09cb2284e2ddbb73a995deee3e91783fd04d177
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates
 WORKDIR /workspace
-ARG INTERFACES_REF=6e20a3f4df2e52b99a0ad6add83d4528262b5dbc
-ARG CLIENTS_REF=5695b16a1577aadbfe414123927e45927f88a7f0
+ARG INTERFACES_REF=2c5c806174e067fbe83ad48b724366323ba390a2
+ARG CLIENTS_REF=5cd1a537f7ab98808ece4cdd09723be0bf49ce8b
 RUN git init fiducia-interfaces \
     && git -C fiducia-interfaces remote add origin https://github.com/fiducia-cloud/fiducia-interfaces.git \
     && git -C fiducia-interfaces fetch --depth 1 origin "$INTERFACES_REF" \

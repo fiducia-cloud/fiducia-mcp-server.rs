@@ -55,9 +55,11 @@ impl Drop for TelemetryGuard {
 ///
 /// Exporter failures fail open to stderr-only telemetry. Error details are not
 /// printed because an OTLP endpoint or header can contain credentials.
-pub fn init(service_name: &'static str, service_namespace: &'static str) -> TelemetryGuard {
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,hyper=warn"));
+pub fn init(
+    service_name: &'static str,
+    service_namespace: &'static str,
+    filter: EnvFilter,
+) -> TelemetryGuard {
     let resource = resource(service_name, service_namespace);
     let endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .ok()

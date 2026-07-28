@@ -8,6 +8,13 @@ without cloning every repo.
 Binary: `fiducia-mcp` — speaks MCP over **stdio** (stdout is the wire; all
 logs go to stderr).
 
+The binary audits `.cli-flags.toml` before telemetry or MCP startup. The only
+accepted process flag is `--log-filter`; upstream URLs, tenant identifiers,
+mutation gates, Kubernetes configuration, exporter settings, and every
+credential remain environment-only. Installed binaries discover the contract
+from the current directory, executable directory, or
+`../share/fiducia-mcp-server`; set `FIDUCIA_FLAGS_CONFIG` for an explicit path.
+
 Platform reference docs live in [`docs/`](docs/): where secrets/KV are
 persisted and how consumers ingest them ([secrets-and-kv.md](docs/secrets-and-kv.md)),
 NATS/JetStream design + hardening invariants ([nats-and-messaging.md](docs/nats-and-messaging.md)),

@@ -1,0 +1,260 @@
+2026-07-28T04:31:04.8718658Z #22 25.58    Compiling idna v1.1.0
+2026-07-28T04:31:05.0961406Z #22 25.80    Compiling indexmap v2.14.0
+2026-07-28T04:31:05.8069357Z #22 26.66    Compiling num-integer v0.1.46
+2026-07-28T04:31:06.4538265Z #22 27.16    Compiling aho-corasick v1.1.4
+2026-07-28T04:31:07.3173920Z #22 28.02    Compiling ref-cast v1.0.26
+2026-07-28T04:31:07.6413992Z #22 28.25    Compiling try-lock v0.2.5
+2026-07-28T04:31:07.6414565Z #22 28.35    Compiling tower-layer v0.3.3
+2026-07-28T04:31:07.7811266Z #22 28.64    Compiling getrandom v0.4.3
+2026-07-28T04:31:08.1213054Z #22 28.85    Compiling zeroize v1.9.0
+2026-07-28T04:31:08.2404961Z #22 28.98    Compiling parking_lot_core v0.9.12
+2026-07-28T04:31:08.4037413Z #22 29.10    Compiling atomic-waker v1.1.2
+2026-07-28T04:31:08.4038858Z #22 29.16    Compiling rand_core v0.10.1
+2026-07-28T04:31:08.6136038Z #22 29.26    Compiling fnv v1.0.7
+2026-07-28T04:31:08.6137796Z #22 29.32    Compiling h2 v0.4.15
+2026-07-28T04:31:13.7852481Z #22 34.43    Compiling rustls-pki-types v1.15.1
+2026-07-28T04:31:13.7854187Z #22 34.49    Compiling regex-automata v0.4.16
+2026-07-28T04:31:14.1437611Z #22 34.85    Compiling want v0.3.1
+2026-07-28T04:31:14.2986208Z #22 35.00    Compiling ppv-lite86 v0.2.21
+2026-07-28T04:31:14.6635919Z #22 35.33    Compiling rand_core v0.6.4
+2026-07-28T04:31:14.6636932Z #22 35.37    Compiling ref-cast-impl v1.0.26
+2026-07-28T04:31:14.7938751Z #22 35.53    Compiling sync_wrapper v1.0.2
+2026-07-28T04:31:14.7940098Z #22 35.60    Compiling lazy_static v1.5.0
+2026-07-28T04:31:14.9404911Z #22 35.65    Compiling version_check v0.9.5
+2026-07-28T04:31:14.9405781Z #22 35.74    Compiling scopeguard v1.2.0
+2026-07-28T04:31:14.9406660Z #22 35.80    Compiling getrandom v0.3.4
+2026-07-28T04:31:15.1016553Z #22 35.88    Compiling untrusted v0.9.0
+2026-07-28T04:31:15.2523648Z #22 35.96    Compiling httpdate v1.0.3
+2026-07-28T04:31:15.5999938Z #22 36.31    Compiling hyper v1.11.0
+2026-07-28T04:31:15.8450117Z #22 36.59    Compiling ahash v0.8.12
+2026-07-28T04:31:15.9968836Z #22 36.70    Compiling lock_api v0.4.14
+2026-07-28T04:31:16.2544476Z #22 36.96    Compiling rand_chacha v0.3.1
+2026-07-28T04:31:17.3310326Z #22 38.04    Compiling num-bigint v0.4.8
+2026-07-28T04:31:20.2613209Z #22 40.97    Compiling form_urlencoded v1.2.2
+2026-07-28T04:31:20.4605030Z #22 41.17    Compiling thiserror v1.0.69
+2026-07-28T04:31:20.4964024Z #22 41.35    Compiling anyhow v1.0.104
+2026-07-28T04:31:20.8764188Z #22 41.53    Compiling rustls v0.23.42
+2026-07-28T04:31:20.8765017Z #22 41.59    Compiling rustversion v1.0.23
+2026-07-28T04:31:20.8765795Z #22 41.73    Compiling num-rational v0.4.2
+2026-07-28T04:31:21.1001049Z #22 41.81    Compiling parking_lot v0.12.5
+2026-07-28T04:31:22.0537443Z #22 42.76    Compiling hyper-util v0.1.20
+2026-07-28T04:31:22.2526877Z #22 43.11    Compiling rustls-webpki v0.103.13
+2026-07-28T04:31:22.5444549Z #22 43.25    Compiling rand v0.8.7
+2026-07-28T04:31:23.5407830Z #22 44.25    Compiling tower v0.5.3
+2026-07-28T04:31:24.1632760Z #22 44.80    Compiling num-iter v0.1.46
+2026-07-28T04:31:24.1633648Z #22 44.87    Compiling http-body-util v0.1.4
+2026-07-28T04:31:24.4232245Z #22 45.13    Compiling futures-executor v0.3.33
+2026-07-28T04:31:24.8075500Z #22 45.51    Compiling num-complex v0.4.6
+2026-07-28T04:31:25.1676224Z #22 45.89    Compiling thiserror-impl v1.0.69
+2026-07-28T04:31:25.1678589Z #22 45.93    Compiling indexmap v1.9.3
+2026-07-28T04:31:25.2738310Z #22 46.02    Compiling subtle v2.6.1
+2026-07-28T04:31:25.2739193Z #22 46.04    Compiling either v1.17.0
+2026-07-28T04:31:25.5153103Z #22 46.13    Compiling data-encoding v2.11.0
+2026-07-28T04:31:25.5154233Z #22 46.22    Compiling crossbeam-utils v0.8.22
+2026-07-28T04:31:25.6723446Z #22 46.38    Compiling thiserror v2.0.19
+2026-07-28T04:31:25.7920833Z #22 46.65    Compiling itertools v0.14.0
+2026-07-28T04:31:27.4303555Z #22 48.14    Compiling num v0.4.3
+2026-07-28T04:31:28.3758206Z #22 49.08    Compiling url v2.5.8
+2026-07-28T04:31:28.5662385Z #22 49.42    Compiling tokio-stream v0.1.19
+2026-07-28T04:31:29.1999729Z #22 49.91    Compiling pin-project-internal v1.1.13
+2026-07-28T04:31:30.1539671Z #22 50.86    Compiling thiserror-impl v2.0.19
+2026-07-28T04:31:31.1051580Z #22 51.84    Compiling heck v0.5.0
+2026-07-28T04:31:31.3207202Z #22 51.96    Compiling ident_case v1.0.1
+2026-07-28T04:31:31.3209588Z #22 52.00    Compiling hashbrown v0.12.3
+2026-07-28T04:31:31.3210537Z #22 52.03    Compiling strsim v0.11.1
+2026-07-28T04:31:31.5732961Z #22 52.28    Compiling unicode-general-category v1.1.0
+2026-07-28T04:31:31.9369226Z #22 52.55    Compiling cpufeatures v0.3.0
+2026-07-28T04:31:31.9370918Z #22 52.58    Compiling borrow-or-share v0.2.4
+2026-07-28T04:31:31.9371849Z #22 52.59    Compiling mime v0.3.17
+2026-07-28T04:31:31.9372453Z #22 52.64    Compiling bit-vec v0.8.0
+2026-07-28T04:31:32.1702259Z #22 52.88    Compiling crc32fast v1.5.0
+2026-07-28T04:31:32.2173936Z #22 53.07    Compiling bit-set v0.8.0
+2026-07-28T04:31:32.3432869Z #22 53.20    Compiling axum-core v0.4.5
+2026-07-28T04:31:32.5030600Z #22 53.21    Compiling fluent-uri v0.4.1
+2026-07-28T04:31:32.9197277Z #22 53.63    Compiling chacha20 v0.10.1
+2026-07-28T04:31:34.2251013Z #22 54.84    Compiling darling_core v0.23.0
+2026-07-28T04:31:34.2251854Z #22 54.93    Compiling strum_macros v0.28.0
+2026-07-28T04:31:35.1752399Z #22 55.84    Compiling pin-project v1.1.13
+2026-07-28T04:31:35.1753278Z #22 55.88    Compiling prost-derive v0.13.5
+2026-07-28T04:31:36.2000171Z #22 56.91    Compiling fraction v0.15.4
+2026-07-28T04:31:36.5950051Z #22 57.30    Compiling opentelemetry v0.27.1
+2026-07-28T04:31:37.0089935Z #22 57.63    Compiling webpki-roots v1.0.9
+2026-07-28T04:31:37.0090597Z #22 57.71    Compiling async-stream-impl v0.3.6
+2026-07-28T04:31:37.2535711Z #22 58.11    Compiling outref v0.5.2
+2026-07-28T04:31:37.4424006Z #22 58.16    Compiling matchit v0.7.3
+2026-07-28T04:31:37.4425087Z #22 58.17    Compiling crossbeam-epoch v0.9.20
+2026-07-28T04:31:37.5944209Z #22 58.30    Compiling bytecount v0.6.9
+2026-07-28T04:31:37.8626392Z #22 58.52    Compiling glob v0.3.4
+2026-07-28T04:31:37.8627636Z #22 58.57    Compiling vsimd v0.8.0
+2026-07-28T04:31:38.2932405Z #22 59.00    Compiling micromap v0.3.0
+2026-07-28T04:31:38.5812460Z #22 59.29    Compiling adler2 v2.0.1
+2026-07-28T04:31:38.9316186Z #22 59.60    Compiling tinyvec_macros v0.1.1
+2026-07-28T04:31:38.9318425Z #22 59.62    Compiling num-cmp v0.1.0
+2026-07-28T04:31:38.9319489Z #22 59.64    Compiling simd-adler32 v0.3.10
+2026-07-28T04:31:39.3396881Z #22 60.04    Compiling jsonschema-value v0.48.5
+2026-07-28T04:31:39.3398142Z #22 60.05    Compiling miniz_oxide v0.8.9
+2026-07-28T04:31:39.9247648Z #22 60.63    Compiling tinyvec v1.12.0
+2026-07-28T04:31:40.3582737Z #22 60.98    Compiling prefix-trie v0.8.4
+2026-07-28T04:31:40.3583807Z #22 61.06    Compiling referencing v0.48.5
+2026-07-28T04:31:41.0208254Z #22 61.67    Compiling uuid-simd v0.8.0
+2026-07-28T04:31:41.0208906Z #22 61.73    Compiling opentelemetry_sdk v0.27.1
+2026-07-28T04:31:41.3293672Z #22 62.04    Compiling axum v0.7.9
+2026-07-28T04:31:47.4370876Z #22 68.06    Compiling async-stream v0.3.6
+2026-07-28T04:31:47.4371750Z #22 68.14    Compiling darling_macro v0.23.0
+2026-07-28T04:31:47.6607016Z #22 68.37    Compiling prost v0.13.5
+2026-07-28T04:31:48.1516126Z #22 68.84    Compiling strum v0.28.0
+2026-07-28T04:31:48.1516824Z #22 68.86    Compiling tower v0.4.13
+2026-07-28T04:31:48.6709504Z #22 69.38    Compiling rand v0.10.2
+2026-07-28T04:31:49.4162683Z #22 70.12    Compiling fancy-regex v0.18.0
+2026-07-28T04:31:49.6072993Z #22 70.31    Compiling hyper-timeout v0.5.2
+2026-07-28T04:31:49.7798669Z #22 70.49    Compiling regex v1.13.1
+2026-07-28T04:31:51.1177594Z #22 71.82    Compiling uuid v1.24.0
+2026-07-28T04:31:51.4834892Z #22 72.19    Compiling jsonschema-regex v0.48.5
+2026-07-28T04:31:51.6644504Z #22 72.37    Compiling email_address v0.2.9
+2026-07-28T04:31:52.1063639Z #22 72.81    Compiling serde_derive_internals v0.30.0
+2026-07-28T04:31:52.3920129Z #22 73.10    Compiling socket2 v0.5.10
+2026-07-28T04:31:53.5854967Z #22 74.29    Compiling schemars_derive v1.2.2
+2026-07-28T04:31:54.5772939Z #22 75.28    Compiling tonic v0.12.3
+2026-07-28T04:31:55.0665780Z #22 75.77    Compiling jsonschema v0.48.5
+2026-07-28T04:31:55.7460822Z #22 76.45    Compiling flate2 v1.1.9
+2026-07-28T04:31:56.2857724Z #22 76.99    Compiling hickory-proto v0.26.1
+2026-07-28T04:31:58.3802031Z #22 79.09    Compiling darling v0.23.0
+2026-07-28T04:31:58.8122636Z #22 79.52    Compiling crossbeam-channel v0.5.16
+2026-07-28T04:31:59.4900038Z #22 80.20    Compiling tokio-rustls v0.26.4
+2026-07-28T04:31:59.7004250Z #22 80.46    Compiling matchers v0.2.0
+2026-07-28T04:31:59.8521181Z #22 80.56    Compiling sharded-slab v0.1.7
+2026-07-28T04:32:00.4501157Z #22 81.16    Compiling ureq-proto v0.6.0
+2026-07-28T04:32:02.7129232Z #22 83.42    Compiling tracing-log v0.2.0
+2026-07-28T04:32:02.9641249Z #22 83.71    Compiling flags2env v0.1.0 (https://github.com/ORESoftware/flags-2-env.git?rev=377bff1a4e7424eb98377997a232ddc0fc700f59#377bff1a)
+2026-07-28T04:32:03.1155962Z #22 83.82    Compiling chrono v0.4.45
+2026-07-28T04:32:05.7930370Z #22 86.54    Compiling tracing-serde v0.2.0
+2026-07-28T04:32:05.9447586Z #22 86.65    Compiling thread_local v1.1.10
+2026-07-28T04:32:05.9478629Z #22 86.80    Compiling ryu v1.0.23
+2026-07-28T04:32:06.1736396Z #22 86.88    Compiling bitflags v2.13.1
+2026-07-28T04:32:06.3421570Z #22 87.09    Compiling utf8-zero v0.8.1
+2026-07-28T04:32:06.5090472Z #22 87.20    Compiling nu-ansi-term v0.50.3
+2026-07-28T04:32:06.5091698Z #22 87.23    Compiling rmcp v2.2.0
+2026-07-28T04:32:06.7136894Z #22 87.37    Compiling dyn-clone v1.0.20
+2026-07-28T04:32:06.7138255Z #22 87.45    Compiling tagptr v0.2.0
+2026-07-28T04:32:06.8423196Z #22 87.57    Compiling moka v0.12.15
+2026-07-28T04:32:06.9942052Z #22 87.70    Compiling schemars v1.2.2
+2026-07-28T04:32:07.5109006Z #22 88.22    Compiling tracing-subscriber v0.3.23
+2026-07-28T04:32:08.1318941Z #22 88.99    Compiling ureq v3.3.0
+2026-07-28T04:32:13.4636141Z #22 94.17    Compiling tower-http v0.6.11
+2026-07-28T04:32:14.0662151Z #22 94.77    Compiling serde_urlencoded v0.7.1
+2026-07-28T04:32:15.7873002Z #22 96.49    Compiling hyper-rustls v0.27.9
+2026-07-28T04:32:16.2784158Z #22 96.98    Compiling fiducia-interfaces v0.1.0 (https://github.com/fiducia-cloud/fiducia-interfaces.git?rev=2c5c806174e067fbe83ad48b724366323ba390a2#2c5c8061)
+2026-07-28T04:32:17.6231326Z #22 98.33    Compiling rmcp-macros v2.2.0
+2026-07-28T04:32:18.6260801Z #22 99.33    Compiling hickory-net v0.26.1
+2026-07-28T04:32:19.3784127Z #22 100.1    Compiling opentelemetry-proto v0.27.0
+2026-07-28T04:32:21.3383619Z #22 102.0    Compiling futures v0.3.33
+2026-07-28T04:32:21.3384276Z #22 102.0    Compiling libloading v0.8.9
+2026-07-28T04:32:21.5424766Z #22 102.2    Compiling pastey v0.2.3
+2026-07-28T04:32:21.5425599Z #22 102.2    Compiling resolv-conf v0.7.6
+2026-07-28T04:32:22.1824759Z #22 102.9    Compiling hickory-resolver v0.26.1
+2026-07-28T04:32:26.6683994Z #22 107.4    Compiling opentelemetry-otlp v0.27.0
+2026-07-28T04:32:27.6433300Z #22 108.3    Compiling fiducia-client v0.1.0 (/workspace/fiducia-clients/clients/rust)
+2026-07-28T04:32:32.1891242Z #22 112.9    Compiling reqwest v0.12.28
+2026-07-28T04:32:32.8266736Z #22 113.5    Compiling tracing-opentelemetry v0.28.0
+2026-07-28T04:32:34.6438853Z #22 115.3    Compiling fiducia-mcp-server v0.1.0 (/workspace/fiducia-mcp-server.rs)
+2026-07-28T04:32:59.3352761Z #22 140.2     Finished `release` profile [optimized] target(s) in 2m 20s
+2026-07-28T04:32:59.4994621Z #22 DONE 140.4s
+2026-07-28T04:32:59.7388084Z 
+2026-07-28T04:32:59.7391542Z #23 [stage-2 4/5] COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/target/release/fiducia-mcp /usr/local/bin/fiducia-mcp
+2026-07-28T04:32:59.7392928Z #23 DONE 0.0s
+2026-07-28T04:32:59.7393433Z 
+2026-07-28T04:32:59.7394708Z #24 [stage-2 5/5] COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/.cli-flags.toml /usr/local/share/fiducia-mcp-server/.cli-flags.toml
+2026-07-28T04:32:59.7395891Z #24 DONE 0.0s
+2026-07-28T04:32:59.7396146Z 
+2026-07-28T04:32:59.7396319Z #25 exporting to image
+2026-07-28T04:32:59.7396725Z #25 exporting layers
+2026-07-28T04:33:00.0120582Z #25 exporting layers 0.4s done
+2026-07-28T04:33:00.0311213Z #25 writing image sha256:4b7c3118d67978c91ce38878ac9e5d61ad1d1ded7acbdf2a2232a5d854a5a085 done
+2026-07-28T04:33:00.0312915Z #25 naming to docker.io/library/fiducia-mcp:a2324b3299102f373adf947aa179dea0997ea0ed done
+2026-07-28T04:33:00.0313655Z #25 DONE 0.4s
+2026-07-28T04:33:00.0395919Z ##[group]Run set -euo pipefail
+2026-07-28T04:33:00.0396259Z [36;1mset -euo pipefail[0m
+2026-07-28T04:33:00.0396523Z [36;1mimage="fiducia-mcp:${GITHUB_SHA}"[0m
+2026-07-28T04:33:00.0396863Z [36;1mdocker run --rm --entrypoint sh "$image" -lc '[0m
+2026-07-28T04:33:00.0397571Z [36;1m  test -r /usr/local/share/fiducia-mcp-server/.cli-flags.toml[0m
+2026-07-28T04:33:00.0398090Z [36;1m  if ldd /usr/local/bin/fiducia-mcp 2>/dev/null | grep -qi flags2env; then[0m
+2026-07-28T04:33:00.0398618Z [36;1m    echo "runtime unexpectedly depends on a flags2env shared library" >&2[0m
+2026-07-28T04:33:00.0399012Z [36;1m    exit 1[0m
+2026-07-28T04:33:00.0399216Z [36;1m  fi[0m
+2026-07-28T04:33:00.0399401Z [36;1m'[0m
+2026-07-28T04:33:00.0399585Z [36;1m[0m
+2026-07-28T04:33:00.0399760Z [36;1mset +e[0m
+2026-07-28T04:33:00.0400009Z [36;1msecret_output=$(docker run --rm "$image" \[0m
+2026-07-28T04:33:00.0400413Z [36;1m  --fiducia-api-key=must-remain-environment-only 2>&1)[0m
+2026-07-28T04:33:00.0400807Z [36;1msecret_status=$?[0m
+2026-07-28T04:33:00.0401033Z [36;1mset -e[0m
+2026-07-28T04:33:00.0401251Z [36;1mprintf '%s\n' "$secret_output"[0m
+2026-07-28T04:33:00.0401532Z [36;1mtest "$secret_status" -ne 0[0m
+2026-07-28T04:33:00.0401955Z [36;1mgrep -Fq -- '--fiducia-api-key=must-remain-environment-only' <<<"$secret_output"[0m
+2026-07-28T04:33:00.0402383Z [36;1m[0m
+2026-07-28T04:33:00.0402575Z [36;1mstdout_file=$(mktemp)[0m
+2026-07-28T04:33:00.0402818Z [36;1mstderr_file=$(mktemp)[0m
+2026-07-28T04:33:00.0403102Z [36;1mtrap 'rm -f "$stdout_file" "$stderr_file"' EXIT[0m
+2026-07-28T04:33:00.0403401Z [36;1mset +e[0m
+2026-07-28T04:33:00.0403694Z [36;1mtimeout 15s docker run --rm -i "$image" --log-filter=debug \[0m
+2026-07-28T04:33:00.0404090Z [36;1m  </dev/null >"$stdout_file" 2>"$stderr_file"[0m
+2026-07-28T04:33:00.0404396Z [36;1msmoke_status=$?[0m
+2026-07-28T04:33:00.0404618Z [36;1mset -e[0m
+2026-07-28T04:33:00.0404825Z [36;1mtest "$smoke_status" -eq 0[0m
+2026-07-28T04:33:00.0405091Z [36;1mtest ! -s "$stdout_file"[0m
+2026-07-28T04:33:00.0405380Z [36;1m! grep -Fq -- '--log-filter' "$stderr_file"[0m
+2026-07-28T04:33:00.0449344Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-07-28T04:33:00.0449689Z env:
+2026-07-28T04:33:00.0449888Z   CARGO_HOME: /home/runner/.cargo
+2026-07-28T04:33:00.0450158Z   CARGO_INCREMENTAL: 0
+2026-07-28T04:33:00.0450373Z   CARGO_TERM_COLOR: always
+2026-07-28T04:33:00.0450602Z   CACHE_ON_FAILURE: false
+2026-07-28T04:33:00.0450826Z ##[endgroup]
+2026-07-28T04:33:00.4330801Z Error: Custom { kind: InvalidInput, error: "unknown command-line option(s): --fiducia-api-key=must-remain-environment-only" }
+2026-07-28T04:33:00.6367019Z ##[error]Process completed with exit code 1.
+2026-07-28T04:33:00.6487853Z Post job cleanup.
+2026-07-28T04:33:00.7378148Z [command]/usr/bin/git version
+2026-07-28T04:33:00.7424539Z git version 2.54.0
+2026-07-28T04:33:00.7462182Z Temporarily overriding HOME='/home/runner/work/_temp/e6f20010-6aaa-47b6-b169-70291e7c8638' before making global git config changes
+2026-07-28T04:33:00.7463505Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-28T04:33:00.7467829Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fiducia-mcp-server.rs/fiducia-mcp-server.rs/flags2env
+2026-07-28T04:33:00.7502460Z Removing SSH command configuration
+2026-07-28T04:33:00.7509403Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-28T04:33:00.7547373Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-28T04:33:00.7813955Z Removing HTTP extra header
+2026-07-28T04:33:00.7814861Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-28T04:33:00.7851133Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-28T04:33:00.8099413Z Removing includeIf entries pointing to credentials config files
+2026-07-28T04:33:00.8106787Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-28T04:33:00.8145963Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-28T04:33:00.8637007Z Post job cleanup.
+2026-07-28T04:33:00.9519447Z [command]/usr/bin/git version
+2026-07-28T04:33:00.9597789Z git version 2.54.0
+2026-07-28T04:33:00.9640237Z Temporarily overriding HOME='/home/runner/work/_temp/1e225aed-1f58-4eee-b314-a61f794d3db9' before making global git config changes
+2026-07-28T04:33:00.9642217Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-28T04:33:00.9646092Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fiducia-mcp-server.rs/fiducia-mcp-server.rs/fiducia-clients
+2026-07-28T04:33:00.9679346Z Removing SSH command configuration
+2026-07-28T04:33:00.9686552Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-28T04:33:00.9723454Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-28T04:33:00.9975749Z Removing HTTP extra header
+2026-07-28T04:33:00.9982414Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-28T04:33:01.0019888Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-28T04:33:01.0278376Z Removing includeIf entries pointing to credentials config files
+2026-07-28T04:33:01.0286591Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-28T04:33:01.0331294Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-28T04:33:01.0806217Z Post job cleanup.
+2026-07-28T04:33:01.1656034Z [command]/usr/bin/git version
+2026-07-28T04:33:01.1701411Z git version 2.54.0
+2026-07-28T04:33:01.1740250Z Temporarily overriding HOME='/home/runner/work/_temp/be2d53b3-227c-4882-b35d-3ab2a8faea2e' before making global git config changes
+2026-07-28T04:33:01.1741706Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-28T04:33:01.1747466Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fiducia-mcp-server.rs/fiducia-mcp-server.rs/fiducia-mcp-server.rs
+2026-07-28T04:33:01.1781816Z Removing SSH command configuration
+2026-07-28T04:33:01.1788909Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-28T04:33:01.1828069Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-28T04:33:01.2092374Z Removing HTTP extra header
+2026-07-28T04:33:01.2098245Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-28T04:33:01.2129011Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-28T04:33:01.2392003Z Removing includeIf entries pointing to credentials config files
+2026-07-28T04:33:01.2400682Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-28T04:33:01.2446009Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-28T04:33:01.2850453Z Cleaning up orphan processes

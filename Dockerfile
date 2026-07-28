@@ -52,6 +52,7 @@ RUN apt-get update \
       --shell /usr/sbin/nologin nonroot
 COPY --from=kubectl --chown=65532:65532 /tmp/kubectl /usr/local/bin/kubectl
 COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/target/release/fiducia-mcp /usr/local/bin/fiducia-mcp
+COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/.cli-flags.toml /usr/local/share/fiducia-mcp-server/.cli-flags.toml
 ENV HOME=/home/nonroot
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/fiducia-mcp"]

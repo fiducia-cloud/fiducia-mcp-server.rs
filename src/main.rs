@@ -11,7 +11,9 @@ use fiducia_mcp_server::upstream::{Config, Upstream};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _telemetry = fiducia_mcp_server::telemetry::init("fiducia-mcp", "fiducia-cloud");
+    let log_filter = fiducia_mcp_server::flags::process_log_filter()?;
+    let _telemetry =
+        fiducia_mcp_server::telemetry::init("fiducia-mcp", "fiducia-cloud", log_filter);
 
     let config = Config::from_env();
     tracing::info!(

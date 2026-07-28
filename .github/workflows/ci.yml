@@ -65,7 +65,7 @@ jobs:
       - name: Build non-root tool-runner image
         working-directory: fiducia-mcp-server.rs
         run: docker build --tag "fiducia-mcp:${GITHUB_SHA}" .
-      - name: Verify final image flags runtime
+      - name: Verify final image flags runtime and MCP stdout framing
         shell: bash
         run: |
           set -euo pipefail
@@ -93,18 +93,32 @@ jobs:
           stdout_file=$(mktemp)
           stderr_file=$(mktemp)
           trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
+          initialize='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"flags2env-ci","version":"1.0"}}}'
           set +e
-          timeout 15s docker run --rm -i "$image" --log-filter=debug \
-            </dev/null >"$stdout_file" 2>"$stderr_file"
+          printf '%s\n' "$initialize" | timeout 15s docker run --rm -i "$image" --log-filter=debug \
+            >"$stdout_file" 2>"$stderr_file"
           smoke_status=$?
           set -e
           case "$smoke_status" in
-            0|124) ;;
+            0|1|124) ;;
             *) cat "$stderr_file" >&2; exit "$smoke_status" ;;
           esac
-          test ! -s "$stdout_file"
+          python3 - "$stdout_file" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          lines = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.strip()]
+          if not lines:
+              raise SystemExit("MCP server emitted no initialize response")
+          messages = [json.loads(line) for line in lines]
+          if any(message.get("jsonrpc") != "2.0" for message in messages):
+              raise SystemExit("stdout contained non-JSON-RPC output")
+          if not any(message.get("id") == 1 and ("result" in message or "error" in message) for message in messages):
+              raise SystemExit("MCP server emitted no response for initialize id=1")
+          PY
           case "$(cat "$stderr_file")" in
-            *'unknown command-line option'*)
+            *'unknown command-line option'*|*'flags-2-env configuration audit failed'*|*'invalid --log-filter'*)
               cat "$stderr_file" >&2
               exit 1
               ;;

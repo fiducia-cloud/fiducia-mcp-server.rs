@@ -85,7 +85,10 @@ jobs:
           set -e
           printf '%s\n' "$secret_output"
           test "$secret_status" -ne 0
-          grep -Fq -- '--fiducia-api-key=must-remain-environment-only' <<<"$secret_output"
+          case "$secret_output" in
+            *'--fiducia-api-key=must-remain-environment-only'*) ;;
+            *) echo 'final image did not identify the rejected secret-bearing flag' >&2; exit 1 ;;
+          esac
 
           stdout_file=$(mktemp)
           stderr_file=$(mktemp)
@@ -95,9 +98,17 @@ jobs:
             </dev/null >"$stdout_file" 2>"$stderr_file"
           smoke_status=$?
           set -e
-          test "$smoke_status" -eq 0
+          case "$smoke_status" in
+            0|124) ;;
+            *) cat "$stderr_file" >&2; exit "$smoke_status" ;;
+          esac
           test ! -s "$stdout_file"
-          ! grep -Fq -- '--log-filter' "$stderr_file"
+          case "$(cat "$stderr_file")" in
+            *'unknown command-line option'*)
+              cat "$stderr_file" >&2
+              exit 1
+              ;;
+          esac
       - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
           tool: cargo-audit@0.22.2

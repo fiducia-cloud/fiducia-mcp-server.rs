@@ -1,0 +1,45 @@
+name: Capture DEN-397 image smoke log (temporary)
+
+on:
+  pull_request:
+    types: [synchronize, reopened]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  capture:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'feat/den-397-flags2env' &&
+      github.actor == 'ORESoftware'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Download failed CI log tail
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'https://api.github.com/repos/fiducia-cloud/fiducia-mcp-server.rs/actions/jobs/90178128182/logs' \
+            --output .den-397-image-full.log
+          tail -n 220 .den-397-image-full.log > .den-397-image-tail.log
+          rm .den-397-image-full.log
+      - name: Commit diagnostic
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .den-397-image-tail.log
+          git commit -m 'chore: capture Fiducia MCP image smoke failure'
+          git push origin HEAD:feat/den-397-flags2env

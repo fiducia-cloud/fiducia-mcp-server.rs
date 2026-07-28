@@ -32,6 +32,20 @@ jobs:
           repository: fiducia-cloud/fiducia-clients
           ref: 5cd1a537f7ab98808ece4cdd09723be0bf49ce8b
           path: fiducia-clients
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          repository: ORESoftware/flags-2-env
+          ref: 377bff1a4e7424eb98377997a232ddc0fc700f59
+          path: flags2env
+      - name: Audit exact CLI contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -C flags2env cli
+          flags2env/build/flags2env audit fiducia-mcp-server.rs/.cli-flags.toml
+          grep -F 'rev = "377bff1a4e7424eb98377997a232ddc0fc700f59"' fiducia-mcp-server.rs/Cargo.toml
+          grep -F '377bff1a4e7424eb98377997a232ddc0fc700f59' fiducia-mcp-server.rs/Cargo.lock
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.97.0"
@@ -51,6 +65,39 @@ jobs:
       - name: Build non-root tool-runner image
         working-directory: fiducia-mcp-server.rs
         run: docker build --tag "fiducia-mcp:${GITHUB_SHA}" .
+      - name: Verify final image flags runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="fiducia-mcp:${GITHUB_SHA}"
+          docker run --rm --entrypoint sh "$image" -lc '
+            test -r /usr/local/share/fiducia-mcp-server/.cli-flags.toml
+            if ldd /usr/local/bin/fiducia-mcp 2>/dev/null | grep -qi flags2env; then
+              echo "runtime unexpectedly depends on a flags2env shared library" >&2
+              exit 1
+            fi
+          '
+
+          set +e
+          secret_output=$(docker run --rm "$image" \
+            --fiducia-api-key=must-remain-environment-only 2>&1)
+          secret_status=$?
+          set -e
+          printf '%s\n' "$secret_output"
+          test "$secret_status" -ne 0
+          grep -q 'unknown command-line option' <<<"$secret_output"
+
+          stdout_file=$(mktemp)
+          stderr_file=$(mktemp)
+          trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
+          set +e
+          timeout 15s docker run --rm -i "$image" --log-filter=debug \
+            </dev/null >"$stdout_file" 2>"$stderr_file"
+          smoke_status=$?
+          set -e
+          test "$smoke_status" -eq 0
+          test ! -s "$stdout_file"
+          ! grep -q 'unknown command-line option' "$stderr_file"
       - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
           tool: cargo-audit@0.22.2

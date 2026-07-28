@@ -85,7 +85,7 @@ jobs:
           set -e
           printf '%s\n' "$secret_output"
           test "$secret_status" -ne 0
-          grep -q 'unknown command-line option' <<<"$secret_output"
+          grep -Fq -- '--fiducia-api-key=must-remain-environment-only' <<<"$secret_output"
 
           stdout_file=$(mktemp)
           stderr_file=$(mktemp)
@@ -97,7 +97,7 @@ jobs:
           set -e
           test "$smoke_status" -eq 0
           test ! -s "$stdout_file"
-          ! grep -q 'unknown command-line option' "$stderr_file"
+          ! grep -Fq -- '--log-filter' "$stderr_file"
       - uses: taiki-e/install-action@c44f6b046f1c29ae5918b1e0bfdbb2f1813836fd # v2
         with:
           tool: cargo-audit@0.22.2

@@ -389,7 +389,14 @@ impl FiduciaMcp {
 
     #[tool(
         description = "List Cloudflare zones on the account: name, id, status, \
-                       nameservers. GET Cloudflare /zones."
+                       nameservers. GET Cloudflare /zones.",
+        annotations(
+            title = "List Cloudflare zones",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_zones(&self) -> Result<CallToolResult, McpError> {
         render(self.cloudflare.zones().await)
@@ -397,7 +404,14 @@ impl FiduciaMcp {
 
     #[tool(
         description = "List DNS records in a Cloudflare zone (accepts a zone name or \
-                       id), following pagination → [{id,type,name,content,proxied,ttl}]."
+                       id), following pagination → [{id,type,name,content,proxied,ttl}].",
+        annotations(
+            title = "List Cloudflare DNS records",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_dns_records(
         &self,
@@ -409,7 +423,14 @@ impl FiduciaMcp {
     #[tool(
         description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): create or \
                        update a DNS record, matched on (type, name). Allowed types: \
-                       A/AAAA/CNAME/TXT/MX. POST if absent, else PUT."
+                       A/AAAA/CNAME/TXT/MX. POST if absent, else PUT.",
+        annotations(
+            title = "Create or update Cloudflare DNS record",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_dns_upsert(
         &self,
@@ -431,7 +452,14 @@ impl FiduciaMcp {
 
     #[tool(
         description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): delete a DNS \
-                       record by explicit id in a Cloudflare zone."
+                       record by explicit id in a Cloudflare zone.",
+        annotations(
+            title = "Delete Cloudflare DNS record",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_dns_delete(
         &self,
@@ -625,6 +653,34 @@ mod tests {
             assert!(router.has_route(tool), "missing tool {tool}");
         }
         assert_eq!(router.list_all().len(), 22);
+    }
+
+    #[test]
+    fn cloudflare_tool_annotations_distinguish_reads_from_gated_writes() {
+        let router = FiduciaMcp::tool_router();
+        let tools = router.list_all();
+        let tool = |name: &str| {
+            tools
+                .iter()
+                .find(|tool| tool.name.as_ref() == name)
+                .unwrap_or_else(|| panic!("missing tool {name}"))
+        };
+
+        for name in ["cloudflare_zones", "cloudflare_dns_records"] {
+            let annotations = tool(name).annotations.as_ref().expect("annotations");
+            assert_eq!(annotations.read_only_hint, Some(true));
+            assert_eq!(annotations.destructive_hint, Some(false));
+            assert_eq!(annotations.idempotent_hint, Some(true));
+            assert_eq!(annotations.open_world_hint, Some(true));
+        }
+
+        for name in ["cloudflare_dns_upsert", "cloudflare_dns_delete"] {
+            let annotations = tool(name).annotations.as_ref().expect("annotations");
+            assert_eq!(annotations.read_only_hint, Some(false));
+            assert_eq!(annotations.destructive_hint, Some(true));
+            assert_eq!(annotations.idempotent_hint, Some(true));
+            assert_eq!(annotations.open_world_hint, Some(true));
+        }
     }
 
     #[test]

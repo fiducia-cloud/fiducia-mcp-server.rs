@@ -1,0 +1,207 @@
+name: Apply DNS tool annotations
+
+on:
+  push:
+    branches:
+      - agent/annotate-gated-dns-tools
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/apply-dns-tool-annotations.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-dns-tool-annotations-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  patch-and-verify:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: agent/annotate-gated-dns-tools
+          persist-credentials: true
+      - name: Annotate DNS tools and strengthen gate tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          server_path = Path('src/server.rs')
+          server = server_path.read_text(encoding='utf-8')
+          replacements = {
+              '''    #[tool(
+                  description = "List Cloudflare zones on the account: name, id, status, \\
+                                 nameservers. GET Cloudflare /zones."
+              )]
+          ''': '''    #[tool(
+                  description = "List Cloudflare zones on the account: name, id, status, \\
+                                 nameservers. GET Cloudflare /zones.",
+                  annotations(
+                      title = "List Cloudflare zones",
+                      read_only_hint = true,
+                      destructive_hint = false,
+                      idempotent_hint = true,
+                      open_world_hint = true
+                  )
+              )]
+          ''',
+              '''    #[tool(
+                  description = "List DNS records in a Cloudflare zone (accepts a zone name or \\
+                                 id), following pagination → [{id,type,name,content,proxied,ttl}]."
+              )]
+          ''': '''    #[tool(
+                  description = "List DNS records in a Cloudflare zone (accepts a zone name or \\
+                                 id), following pagination → [{id,type,name,content,proxied,ttl}].",
+                  annotations(
+                      title = "List Cloudflare DNS records",
+                      read_only_hint = true,
+                      destructive_hint = false,
+                      idempotent_hint = true,
+                      open_world_hint = true
+                  )
+              )]
+          ''',
+              '''    #[tool(
+                  description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): create or \\
+                                 update a DNS record, matched on (type, name). Allowed types: \\
+                                 A/AAAA/CNAME/TXT/MX. POST if absent, else PUT."
+              )]
+          ''': '''    #[tool(
+                  description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): create or \\
+                                 update a DNS record, matched on (type, name). Allowed types: \\
+                                 A/AAAA/CNAME/TXT/MX. POST if absent, else PUT.",
+                  annotations(
+                      title = "Create or update Cloudflare DNS record",
+                      read_only_hint = false,
+                      destructive_hint = true,
+                      idempotent_hint = true,
+                      open_world_hint = true
+                  )
+              )]
+          ''',
+              '''    #[tool(
+                  description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): delete a DNS \\
+                                 record by explicit id in a Cloudflare zone."
+              )]
+          ''': '''    #[tool(
+                  description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): delete a DNS \\
+                                 record by explicit id in a Cloudflare zone.",
+                  annotations(
+                      title = "Delete Cloudflare DNS record",
+                      read_only_hint = false,
+                      destructive_hint = true,
+                      idempotent_hint = true,
+                      open_world_hint = true
+                  )
+              )]
+          ''',
+          }
+          for before, after in replacements.items():
+              if before in server:
+                  server = server.replace(before, after, 1)
+              elif after not in server:
+                  raise SystemExit('expected Cloudflare tool declaration was not found')
+
+          insertion = '''    #[test]
+              fn repo_map_is_served_verbatim() {
+          '''
+          annotation_test = '''    #[test]
+              fn cloudflare_tool_annotations_distinguish_reads_from_gated_writes() {
+                  let router = FiduciaMcp::tool_router();
+                  let tools = router.list_all();
+                  let tool = |name: &str| {
+                      tools
+                          .iter()
+                          .find(|tool| tool.name.as_ref() == name)
+                          .unwrap_or_else(|| panic!("missing tool {name}"))
+                  };
+
+                  for name in ["cloudflare_zones", "cloudflare_dns_records"] {
+                      let annotations = tool(name).annotations.as_ref().expect("annotations");
+                      assert_eq!(annotations.read_only_hint, Some(true));
+                      assert_eq!(annotations.destructive_hint, Some(false));
+                      assert_eq!(annotations.idempotent_hint, Some(true));
+                      assert_eq!(annotations.open_world_hint, Some(true));
+                  }
+
+                  for name in ["cloudflare_dns_upsert", "cloudflare_dns_delete"] {
+                      let annotations = tool(name).annotations.as_ref().expect("annotations");
+                      assert_eq!(annotations.read_only_hint, Some(false));
+                      assert_eq!(annotations.destructive_hint, Some(true));
+                      assert_eq!(annotations.idempotent_hint, Some(true));
+                      assert_eq!(annotations.open_world_hint, Some(true));
+                  }
+              }
+
+              #[test]
+              fn repo_map_is_served_verbatim() {
+          '''
+          if insertion in server:
+              server = server.replace(insertion, annotation_test, 1)
+          elif 'cloudflare_tool_annotations_distinguish_reads_from_gated_writes' not in server:
+              raise SystemExit('server annotation test insertion point was not found')
+          server_path.write_text(server, encoding='utf-8')
+
+          cloudflare_path = Path('src/cloudflare.rs')
+          cloudflare = cloudflare_path.read_text(encoding='utf-8')
+          gate_insertion = '''    #[tokio::test]
+              async fn upsert_creates_when_absent() {
+          '''
+          gate_test = '''    #[test]
+              fn mutation_gate_accepts_only_the_exact_value_one() {
+                  for value in [None, Some(""), Some("0"), Some("true"), Some("yes"), Some("01"), Some(" 1 ")] {
+                      let _guard = MutationGuard::set(value);
+                      assert!(!mutations_allowed(), "unexpectedly allowed {value:?}");
+                  }
+                  let _guard = MutationGuard::set(Some("1"));
+                  assert!(mutations_allowed());
+              }
+
+              #[tokio::test]
+              async fn upsert_creates_when_absent() {
+          '''
+          if gate_insertion in cloudflare:
+              cloudflare = cloudflare.replace(gate_insertion, gate_test, 1)
+          elif 'mutation_gate_accepts_only_the_exact_value_one' not in cloudflare:
+              raise SystemExit('mutation gate test insertion point was not found')
+          cloudflare_path.write_text(cloudflare, encoding='utf-8')
+          PY
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: '1.97.0'
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Format
+        run: cargo fmt --all
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked --all-targets
+      - name: Release build
+        run: cargo build --locked --release
+      - name: Scan for unresolved conflict markers
+        run: |
+          if git grep -n -E '^(<<<<<<< |=======$|>>>>>>> )' -- . ':(exclude)*.lock'; then
+            exit 1
+          fi
+      - name: Commit verified annotation changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- src/server.rs src/cloudflare.rs
+          if git diff --cached --quiet; then
+            echo 'DNS tool annotations already applied.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Annotate and test gated DNS tools'
+          git push origin HEAD:agent/annotate-gated-dns-tools

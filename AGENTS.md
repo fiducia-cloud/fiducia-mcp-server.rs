@@ -24,6 +24,12 @@ README.md for the tool table and env configuration.
 - Never log secret values; log only set/unset (see `main.rs`). This includes
   `CLOUDFLARE_API_TOKEN` — it is only ever attached as a bearer header and must
   never appear in a log line, error string, or tool result.
+- **Bound every upstream body before parsing or returning it.** Raw diagnostic
+  HTTP reads are capped at 4 MiB, including chunked responses; blocking SDK
+  error bodies are truncated before becoming model-visible. New HTTP helpers
+  must preserve or tighten those limits rather than calling unbounded `text()`
+  or `bytes()` methods. Prefer the existing `Response::chunk()` loop so response
+  bounding does not require expanding the locked dependency graph.
 - **kubectl is read-only.** Build argv as a `Vec<String>` (never a shell
   string), validate every `--context` against `kubectl config get-contexts`,
   and keep the 15s timeout. Add only read-only verbs.
@@ -55,6 +61,8 @@ README.md for the tool table and env configuration.
 ```sh
 cargo fmt --check && cargo clippy -- -D warnings && cargo test
 ```
+
+The locked CI path must also pass without rewriting `Cargo.lock`.
 
 Smoke-test the wire without an MCP client:
 

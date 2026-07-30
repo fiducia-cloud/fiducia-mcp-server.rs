@@ -24,6 +24,12 @@ pub const API_KEY_ENV: &str = "FIDUCIA_API_KEY";
 
 const DEFAULT_NODE_URL: &str = "http://localhost:8090";
 const DEFAULT_BRAIN_URL: &str = "http://localhost:8095";
+/// Diagnostic tools should never need multi-megabyte control-plane responses.
+/// Bound both successful and error bodies, including chunked transfer encoding.
+const MAX_UPSTREAM_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+/// The blocking SDK owns its own response buffering, so cap what can be surfaced
+/// to the model even when an upstream returns a very large structured error.
+const MAX_CLIENT_ERROR_BODY_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Plane {
@@ -138,6 +144,7 @@ impl Upstream {
             // brain/control-plane trusted-hop headers must never be replayed to
             // a Location chosen by an upstream peer.
             .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
             .build()
             .expect("reqwest client");
@@ -190,7 +197,7 @@ impl Upstream {
 
     /// GET `<plane base>/<path_and_query>` with the plane's auth headers and
     /// return the response body as JSON. Non-2xx responses are reported as
-    /// errors but still carry the upstream body — services here return
+    /// errors but still carry a bounded upstream body — services here return
     /// structured JSON errors worth showing to the model.
     pub async fn get_json(
         &self,
@@ -208,18 +215,46 @@ impl Upstream {
             .await
             .map_err(|e| format!("request to {url} failed: {e}"))?;
         let status = resp.status();
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| format!("reading response from {url} failed: {e}"))?;
-        let json: serde_json::Value =
-            serde_json::from_str(&body).unwrap_or_else(|_| serde_json::Value::String(body.clone()));
+        let body = read_bounded_body(resp, &url).await?;
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap_or_else(|_| {
+            serde_json::Value::String(String::from_utf8_lossy(&body).into_owned())
+        });
         if status.is_success() {
             Ok(json)
         } else {
             Err(format!("{url} returned {status}: {json}"))
         }
     }
+}
+
+async fn read_bounded_body(mut response: reqwest::Response, url: &str) -> Result<Vec<u8>, String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_UPSTREAM_RESPONSE_BYTES as u64)
+    {
+        return Err(format!(
+            "response from {url} exceeded {MAX_UPSTREAM_RESPONSE_BYTES} bytes"
+        ));
+    }
+
+    let initial_capacity = response
+        .content_length()
+        .unwrap_or_default()
+        .min(MAX_UPSTREAM_RESPONSE_BYTES as u64) as usize;
+    let mut body = Vec::with_capacity(initial_capacity);
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| format!("reading response from {url} failed: {error}"))?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_UPSTREAM_RESPONSE_BYTES {
+            return Err(format!(
+                "response from {url} exceeded {MAX_UPSTREAM_RESPONSE_BYTES} bytes"
+            ));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 fn validate_base_url(raw: &str) -> Result<(), String> {
@@ -258,17 +293,31 @@ fn validate_base_url(raw: &str) -> Result<(), String> {
 }
 
 /// Render a fiducia-client error the same way `get_json` renders raw HTTP
-/// failures: keep the upstream JSON body — it's structured and worth showing.
+/// failures, but cap the body before exposing it to a model/tool caller.
 fn format_client_error(err: fiducia_client::Error) -> String {
     match err {
         fiducia_client::Error::Http { status, body } => {
             let body = body
-                .map(|b| b.to_string())
+                .map(|b| truncate_utf8(b.to_string(), MAX_CLIENT_ERROR_BODY_BYTES))
                 .unwrap_or_else(|| "(empty body)".to_string());
             format!("node returned {status}: {body}")
         }
         fiducia_client::Error::Transport(message) => format!("node request failed: {message}"),
     }
+}
+
+fn truncate_utf8(mut value: String, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value;
+    }
+    const SUFFIX: &str = "…[truncated]";
+    let mut end = max_bytes.saturating_sub(SUFFIX.len());
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value.truncate(end);
+    value.push_str(SUFFIX);
+    value
 }
 
 /// Percent-encode a value for use inside a query string.
@@ -374,6 +423,35 @@ mod tests {
         bare.internal_secret = None;
         bare.control_plane_secret = None;
         assert!(Upstream::new(bare).node_client.is_none());
+    }
+
+    #[tokio::test]
+    async fn raw_upstream_response_is_bounded_before_json_parsing() {
+        let app = axum::Router::new().route(
+            "/huge",
+            axum::routing::get(|| async { "x".repeat(MAX_UPSTREAM_RESPONSE_BYTES + 1) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let mut config = cfg();
+        config.brain_url = format!("http://{address}");
+        let error = Upstream::new(config)
+            .get_json(Plane::Brain, "/huge")
+            .await
+            .unwrap_err();
+        assert!(error.contains("exceeded"));
+        assert!(error.contains(&MAX_UPSTREAM_RESPONSE_BYTES.to_string()));
+    }
+
+    #[test]
+    fn client_error_truncation_preserves_utf8_and_bound() {
+        let value = "é".repeat(MAX_CLIENT_ERROR_BODY_BYTES);
+        let truncated = truncate_utf8(value, MAX_CLIENT_ERROR_BODY_BYTES);
+        assert!(truncated.is_char_boundary(truncated.len()));
+        assert!(truncated.ends_with("[truncated]"));
+        assert!(truncated.len() <= MAX_CLIENT_ERROR_BODY_BYTES);
     }
 
     #[test]

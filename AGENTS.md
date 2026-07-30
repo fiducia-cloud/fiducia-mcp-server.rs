@@ -62,6 +62,8 @@ README.md for the tool table and env configuration.
 cargo fmt --check && cargo clippy -- -D warnings && cargo test
 ```
 
+The locked CI path must also pass without rewriting `Cargo.lock`.
+
 Smoke-test the wire without an MCP client:
 
 ```sh

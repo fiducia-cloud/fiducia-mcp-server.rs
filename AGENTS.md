@@ -28,7 +28,8 @@ README.md for the tool table and env configuration.
   HTTP reads are capped at 4 MiB, including chunked responses; blocking SDK
   error bodies are truncated before becoming model-visible. New HTTP helpers
   must preserve or tighten those limits rather than calling unbounded `text()`
-  or `bytes()` methods.
+  or `bytes()` methods. Prefer the existing `Response::chunk()` loop so response
+  bounding does not require expanding the locked dependency graph.
 - **kubectl is read-only.** Build argv as a `Vec<String>` (never a shell
   string), validate every `--context` against `kubectl config get-contexts`,
   and keep the 15s timeout. Add only read-only verbs.

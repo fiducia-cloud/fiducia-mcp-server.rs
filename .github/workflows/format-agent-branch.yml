@@ -1,0 +1,33 @@
+name: format agent branch once
+
+on:
+  push:
+    branches:
+      - agent/harden-upstream-response-bounds
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: agent/harden-upstream-response-bounds
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Apply rustfmt and remove this workflow
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git rm .github/workflows/format-agent-branch.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet || git commit -m 'style: format bounded MCP chunk reader'
+          git push origin HEAD:agent/harden-upstream-response-bounds

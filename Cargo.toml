@@ -38,8 +38,7 @@ fiducia-client = { path = "../fiducia-clients/clients/rust" }
 # Talking to brain (:8095), the ai-agent control plane, Cloudflare v4, and RDAP
 # servers. All node data-plane reads use fiducia-client in both auth modes.
 # rustls so the server can also point at the LB over HTTPS.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-futures-util = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # dns_check: async DNS lookups — system resolver config with a fallback to
 # Cloudflare 1.1.1.1 + Google 8.8.8.8. Abstracted behind `domains::Resolve`

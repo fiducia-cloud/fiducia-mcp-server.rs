@@ -527,6 +527,24 @@ mod tests {
             )
     }
 
+    #[test]
+    fn mutation_gate_accepts_only_the_exact_value_one() {
+        for value in [
+            None,
+            Some(""),
+            Some("0"),
+            Some("true"),
+            Some("yes"),
+            Some("01"),
+            Some(" 1 "),
+        ] {
+            let _guard = MutationGuard::set(value);
+            assert!(!mutations_allowed(), "unexpectedly allowed {value:?}");
+        }
+        let _guard = MutationGuard::set(Some("1"));
+        assert!(mutations_allowed());
+    }
+
     #[tokio::test]
     async fn upsert_creates_when_absent() {
         let _g = MutationGuard::set(Some("1"));

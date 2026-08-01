@@ -1,0 +1,39 @@
+name: web-smoke
+
+# Browser-smoke against the LIVE fiducia.cloud web surface. This is NOT a
+# required PR gate: it hits external sites, so it runs on demand, on a daily
+# schedule, and on pushes to main — never blocking pull requests.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Install Playwright (pinned)
+        working-directory: web-smoke
+        run: |
+          set -euo pipefail
+          npm i -D @playwright/test@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Run browser smoke
+        working-directory: web-smoke
+        run: npx playwright test

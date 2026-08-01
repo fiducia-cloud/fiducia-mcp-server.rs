@@ -802,4 +802,43 @@ mod tests {
         assert_eq!(resolve_location("http://x/", "/a/b"), "http://x/a/b");
         assert_eq!(resolve_location("http://x", "a/b"), "http://x/a/b");
     }
+
+    #[test]
+    fn validate_domain_accepts_names_and_rejects_traversal() {
+        assert_eq!(
+            validate_domain("  Fiducia.Cloud.  ").unwrap(),
+            "fiducia.cloud"
+        );
+        assert_eq!(
+            validate_domain("app.fiducia.cloud").unwrap(),
+            "app.fiducia.cloud"
+        );
+        // A crafted `domain` must never climb out of `/domain/{domain}`.
+        for bad in [
+            "",
+            "   ",
+            "../../secret",
+            "..",
+            "fiducia.cloud/../../x",
+            "foo/bar",
+            "has space.com",
+            "https://evil.example",
+            "under_score.com",
+            "a..b",
+        ] {
+            assert!(
+                validate_domain(bad).is_err(),
+                "domain {bad:?} must be rejected"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn registrar_status_rejects_traversal_domain() {
+        // Validation happens before any request, so an unroutable base is fine.
+        let err = registrar_status(&no_redirect_client(), "http://127.0.0.1:1", "../../etc/passwd")
+            .await
+            .unwrap_err();
+        assert!(err.contains("domain"), "explains the rejection: {err}");
+    }
 }

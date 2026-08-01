@@ -796,6 +796,20 @@ mod tests {
             .any(|s| s == "active"));
     }
 
+    #[tokio::test]
+    async fn oversized_rdap_body_is_rejected() {
+        // No redirect hop; the direct RDAP body is well past the 4 MiB cap.
+        let app = Router::new().route(
+            "/domain/{_d}",
+            get(|| async { "x".repeat(5 * 1024 * 1024) }),
+        );
+        let base = spawn(app).await;
+        let err = registrar_status(&no_redirect_client(), &base, "fiducia.cloud")
+            .await
+            .unwrap_err();
+        assert!(err.contains("exceeded"), "oversized RDAP body must be capped: {err}");
+    }
+
     #[test]
     fn resolve_location_absolute_and_relative() {
         assert_eq!(resolve_location("http://x", "https://y/z"), "https://y/z");

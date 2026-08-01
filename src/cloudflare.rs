@@ -761,6 +761,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn oversized_cloudflare_body_is_rejected_before_parsing() {
+        // Well past the 4 MiB shared cap; must be refused, not buffered whole.
+        let app = Router::new().route(
+            "/zones",
+            get(|| async { "x".repeat(5 * 1024 * 1024) }),
+        );
+        let base = spawn(app).await;
+        let cf = Cloudflare::with_base(base, Some("test-token".into()));
+        let err = cf.zones().await.unwrap_err();
+        assert!(err.contains("exceeded"), "oversized body must be capped: {err}");
+    }
+
+    #[tokio::test]
     async fn bearer_token_is_never_replayed_across_a_redirect() {
         // A redirect must NOT be followed with the bearer token attached.
         let leaked: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));

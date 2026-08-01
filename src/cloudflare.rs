@@ -709,4 +709,97 @@ mod tests {
         assert!(!is_zone_id("fiducia.cloud"));
         assert!(!is_zone_id("0123456789abcdef")); // too short
     }
+
+    #[test]
+    fn record_id_validation_blocks_path_traversal() {
+        // Opaque ids and the ids the tool table documents are accepted.
+        assert_eq!(
+            validate_record_id("  372e67954025e0ba6aaa6d586b9e0b59  ").unwrap(),
+            "372e67954025e0ba6aaa6d586b9e0b59"
+        );
+        assert_eq!(validate_record_id("rec-42").unwrap(), "rec-42");
+        // Anything that could climb out of the record path is rejected.
+        for bad in [
+            "",
+            "  ",
+            "../../zones",
+            "..",
+            "abc/def",
+            "abc%2f..",
+            "id with space",
+            "rec\n",
+        ] {
+            assert!(
+                validate_record_id(bad).is_err(),
+                "record id {bad:?} must be rejected"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_rejects_traversal_record_id_before_any_call() {
+        let _g = MutationGuard::set(Some("1"));
+        let hit: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+        let hit2 = Arc::clone(&hit);
+        // Any request reaching the server flips the flag; the validator must
+        // fire first so nothing is ever sent upstream.
+        let app = Router::new().fallback(move || {
+            let hit = Arc::clone(&hit2);
+            async move {
+                *hit.lock().unwrap() = true;
+                Json(json!({ "success": true, "errors": [], "result": {} }))
+            }
+        });
+        let base = spawn(app).await;
+        let cf = Cloudflare::with_base(base, Some("test-token".into()));
+        let err = cf
+            .dns_delete("0123456789abcdef0123456789abcdef", "../../zones/other")
+            .await
+            .unwrap_err();
+        assert!(err.contains("record_id"), "explains the rejection: {err}");
+        assert!(!*hit.lock().unwrap(), "no HTTP call may be made");
+    }
+
+    #[tokio::test]
+    async fn bearer_token_is_never_replayed_across_a_redirect() {
+        // A redirect must NOT be followed with the bearer token attached.
+        let leaked: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let leaked2 = Arc::clone(&leaked);
+        let app = Router::new()
+            .route(
+                "/zones",
+                get(|| async {
+                    (
+                        StatusCode::FOUND,
+                        [(reqwest::header::LOCATION.as_str(), "/leak")],
+                        "",
+                    )
+                }),
+            )
+            .route(
+                "/leak",
+                get(move |headers: HeaderMap| {
+                    let leaked = Arc::clone(&leaked2);
+                    async move {
+                        *leaked.lock().unwrap() = headers
+                            .get("authorization")
+                            .and_then(|v| v.to_str().ok())
+                            .map(str::to_string);
+                        Json(json!({ "success": true, "errors": [], "result": [] }))
+                    }
+                }),
+            );
+        let base = spawn(app).await;
+        let cf = Cloudflare::with_base(base, Some("super-secret-token".into()));
+        let err = cf.zones().await.unwrap_err();
+        assert!(
+            leaked.lock().unwrap().is_none(),
+            "the redirect endpoint must never be reached (token would leak): {:?}",
+            leaked.lock().unwrap()
+        );
+        assert!(
+            !err.contains("super-secret-token"),
+            "error must not leak the token: {err}"
+        );
+    }
 }

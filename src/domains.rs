@@ -248,6 +248,33 @@ pub async fn registrar_status(
     Ok(parse_rdap(&domain, &json))
 }
 
+/// Validate a domain before it is interpolated into the RDAP request path
+/// (`{base}/domain/{domain}`). Restricting to LDH characters (letters, digits,
+/// hyphen, dot) — with no empty labels — rejects `/`, `..`, whitespace, and
+/// scheme smuggling, so a crafted `domain` cannot traverse or escape the path.
+fn validate_domain(domain: &str) -> Result<String, String> {
+    let domain = domain.trim().trim_end_matches('.');
+    if domain.is_empty() {
+        return Err("`domain` is required".to_string());
+    }
+    if domain.len() > 253 {
+        return Err("`domain` is too long to be a valid domain name".to_string());
+    }
+    let valid_labels = domain.split('.').all(|label| {
+        !label.is_empty()
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    });
+    if !valid_labels {
+        return Err(format!(
+            "`domain` {domain:?} is not a valid domain name (letters, digits, \
+             hyphen, and dot only)"
+        ));
+    }
+    Ok(domain.to_ascii_lowercase())
+}
+
 /// Resolve an RDAP `Location` (absolute, or relative to the bootstrap base).
 fn resolve_location(base: &str, location: &str) -> String {
     if location.starts_with("http://") || location.starts_with("https://") {

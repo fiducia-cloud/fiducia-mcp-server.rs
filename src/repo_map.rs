@@ -33,7 +33,7 @@ fiducia-brain (:8095) is the control plane: shard placement, scaling,
 node-failure handling. fiducia-node-sidecar bridges each node to the brain
 (heartbeats) and the observability stack.
 
-## Repos (dir name = repo name in github.com/fiducia-cloud)
+## Repos (dir name = repo name in github.com/fiducia-cloud) — last synced 2026-08-01
 
 Data/control plane (Rust):
 - fiducia-node.rs — data plane: sharded multi-Raft engine (locks, KV+watches,

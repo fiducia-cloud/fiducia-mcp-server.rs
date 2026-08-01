@@ -727,7 +727,7 @@ mod tests {
             "abc/def",
             "abc%2f..",
             "id with space",
-            "rec\n",
+            "rec\nid",
         ] {
             assert!(
                 validate_record_id(bad).is_err(),
@@ -763,14 +763,14 @@ mod tests {
     #[tokio::test]
     async fn oversized_cloudflare_body_is_rejected_before_parsing() {
         // Well past the 4 MiB shared cap; must be refused, not buffered whole.
-        let app = Router::new().route(
-            "/zones",
-            get(|| async { "x".repeat(5 * 1024 * 1024) }),
-        );
+        let app = Router::new().route("/zones", get(|| async { "x".repeat(5 * 1024 * 1024) }));
         let base = spawn(app).await;
         let cf = Cloudflare::with_base(base, Some("test-token".into()));
         let err = cf.zones().await.unwrap_err();
-        assert!(err.contains("exceeded"), "oversized body must be capped: {err}");
+        assert!(
+            err.contains("exceeded"),
+            "oversized body must be capped: {err}"
+        );
     }
 
     #[tokio::test]

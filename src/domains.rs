@@ -807,7 +807,10 @@ mod tests {
         let err = registrar_status(&no_redirect_client(), &base, "fiducia.cloud")
             .await
             .unwrap_err();
-        assert!(err.contains("exceeded"), "oversized RDAP body must be capped: {err}");
+        assert!(
+            err.contains("exceeded"),
+            "oversized RDAP body must be capped: {err}"
+        );
     }
 
     #[test]
@@ -850,9 +853,13 @@ mod tests {
     #[tokio::test]
     async fn registrar_status_rejects_traversal_domain() {
         // Validation happens before any request, so an unroutable base is fine.
-        let err = registrar_status(&no_redirect_client(), "http://127.0.0.1:1", "../../etc/passwd")
-            .await
-            .unwrap_err();
+        let err = registrar_status(
+            &no_redirect_client(),
+            "http://127.0.0.1:1",
+            "../../etc/passwd",
+        )
+        .await
+        .unwrap_err();
         assert!(err.contains("domain"), "explains the rejection: {err}");
     }
 }

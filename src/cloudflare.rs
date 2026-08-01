@@ -281,6 +281,29 @@ fn is_zone_id(s: &str) -> bool {
     s.len() == 32 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
+/// Validate a DNS record id before it is interpolated into a request path
+/// (`/zones/{id}/dns_records/{record_id}`). Cloudflare ids are opaque tokens,
+/// so we allow only `[A-Za-z0-9_-]`: this rejects `/`, `.`/`..`, whitespace,
+/// and percent escapes, closing off path traversal / endpoint smuggling.
+fn validate_record_id(record_id: &str) -> Result<String, String> {
+    let record_id = record_id.trim();
+    if record_id.is_empty() {
+        return Err("`record_id` is required for cloudflare_dns_delete".to_string());
+    }
+    if record_id.len() > 128
+        || !record_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+    {
+        return Err(
+            "`record_id` must be an opaque Cloudflare record id ([A-Za-z0-9_-]); \
+             got a value with disallowed characters"
+                .to_string(),
+        );
+    }
+    Ok(record_id.to_string())
+}
+
 /// Pick the fields we expose for a DNS record.
 fn summarize_record(r: &Value) -> Value {
     json!({

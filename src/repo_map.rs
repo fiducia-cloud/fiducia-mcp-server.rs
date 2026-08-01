@@ -141,9 +141,16 @@ touches Supabase; Supabase = dashboard identity/sessions only).
 
 ## Observability
 
-dd-prometheus:9090, dd-loki:3100, Grafana at /telemetry, OTLP :4317.
-Node exposes /v1/observe/{locks,semaphores,elections,shards,metrics};
-brain and memory expose /v1/status. No Alertmanager yet.
+Every Rust service shares fiducia-telemetry (tag v0.2.1, OpenTelemetry 0.32
+pipeline): one init() emits JSON stdout logs (node-collected -> Loki) and, when
+OTEL_EXPORTER_OTLP_ENDPOINT is set, OTLP/gRPC traces + metrics to a local
+collector -> Prometheus. A built-in fiducia.service.starts counter proves the
+service -> collector -> Prometheus path is live. This MCP server is the
+deliberate exception: it ships its own stdio-safe telemetry module because
+stdout is the MCP wire. dd-prometheus:9090, dd-loki:3100, Grafana at
+/telemetry, OTLP :4317. Node exposes
+/v1/observe/{locks,semaphores,elections,shards,metrics}; brain and memory
+expose /v1/status. No Alertmanager yet.
 
 ## Hosting
 

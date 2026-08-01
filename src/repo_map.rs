@@ -1,6 +1,7 @@
 //! Embedded, offline reference: what lives where in the fiducia-cloud org.
 //! Served by the `repo_map` tool so agents can orient without cloning
 //! everything. Update this when repos are added, renamed, or archived.
+//! Last synced against `gh repo list fiducia-cloud`: 2026-08-01.
 
 pub const REPO_MAP: &str = r#"# fiducia.cloud — org / architecture map
 

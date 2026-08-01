@@ -247,10 +247,7 @@ impl Cloudflare {
     /// Delete a DNS record by explicit id. **Gated** by `FIDUCIA_MCP_ALLOW_MUTATIONS=1`.
     pub async fn dns_delete(&self, zone: &str, record_id: &str) -> Result<Value, String> {
         mutation_gate()?;
-        let record_id = record_id.trim();
-        if record_id.is_empty() {
-            return Err("`record_id` is required for cloudflare_dns_delete".to_string());
-        }
+        let record_id = validate_record_id(record_id)?;
         let id = self.zone_id(zone).await?;
         let path = format!("/zones/{id}/dns_records/{record_id}");
         let resp = self.send(reqwest::Method::DELETE, &path, None).await?;

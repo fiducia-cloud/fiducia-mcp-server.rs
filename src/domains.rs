@@ -18,6 +18,8 @@ use serde_json::{json, Value};
 use std::future::Future;
 use std::pin::Pin;
 
+use crate::upstream::read_bounded_body;
+
 pub const RDAP_BASE: &str = "https://rdap.org";
 
 /// GitHub Pages apex A records for a `*.github.io` site.

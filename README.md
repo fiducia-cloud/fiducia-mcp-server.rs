@@ -15,7 +15,9 @@ credential remain environment-only. Installed binaries discover the contract
 from the current directory, executable directory, or
 `../share/fiducia-mcp-server`; set `FIDUCIA_FLAGS_CONFIG` for an explicit path.
 
-Platform reference docs live in [`docs/`](docs/): where secrets/KV are
+Platform reference docs live in [`docs/`](docs/): the platform architecture and
+control planes — brain/node/edge/lb/auth/admin/ai-agent
+([platform-architecture.md](docs/platform-architecture.md)), where secrets/KV are
 persisted and how consumers ingest them ([secrets-and-kv.md](docs/secrets-and-kv.md)),
 NATS/JetStream design + hardening invariants ([nats-and-messaging.md](docs/nats-and-messaging.md)),
 and the admin/customer MASH web stacks + browser testing

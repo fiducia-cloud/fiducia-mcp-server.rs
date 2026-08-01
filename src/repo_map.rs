@@ -1,6 +1,7 @@
 //! Embedded, offline reference: what lives where in the fiducia-cloud org.
 //! Served by the `repo_map` tool so agents can orient without cloning
 //! everything. Update this when repos are added, renamed, or archived.
+//! Last synced against `gh repo list fiducia-cloud`: 2026-08-01.
 
 pub const REPO_MAP: &str = r#"# fiducia.cloud — org / architecture map
 
@@ -32,7 +33,7 @@ fiducia-brain (:8095) is the control plane: shard placement, scaling,
 node-failure handling. fiducia-node-sidecar bridges each node to the brain
 (heartbeats) and the observability stack.
 
-## Repos (dir name = repo name in github.com/fiducia-cloud)
+## Repos (dir name = repo name in github.com/fiducia-cloud) — last synced 2026-08-01
 
 Data/control plane (Rust):
 - fiducia-node.rs — data plane: sharded multi-Raft engine (locks, KV+watches,
@@ -55,8 +56,16 @@ Identity, customer, admin:
   Crate/image/k8s still named fiducia-backend.
 - fiducia-admin.rs — operator-only admin dashboard (:8096; same MASH stack;
   WS /admin/ws streams fiducia-sync change frames). Accounts, API keys, infra.
-- fiducia-marketing.web — static Astro marketing site (GitHub Pages +
-  synced fallback into fiducia-customer.rs/static/).
+- fiducia-payments.rs — provider-agnostic payments library: Stripe + PayPal
+  webhook signature verification + event parsing. Pure crate (no HTTP server,
+  no DB; clock and I/O injected for offline unit tests); fiducia-customer.rs
+  mounts the routes and writes the billing tables from
+  fiducia-interfaces/sql/customer.sql.
+- fiducia-marketing.web — static Astro marketing site (renamed from
+  fiducia-ui.web 2026-07; GitHub Pages + synced fallback into
+  fiducia-customer.rs/static/).
+- fiducia-cloud.github.io — public marketing website: the org's GitHub Pages
+  site (Astro), served at fiducia.cloud.
 - fiducia-customer-ui.web — ARCHIVED legacy SPA; do not touch.
 
 AI-agent layer:
@@ -88,8 +97,12 @@ Messaging, clients, interfaces:
   backend WS/SSE transports, hx-ext="fiducia-optimistic" HTMX extension),
   and the fiducia_sync Dart/Flutter package (SQLite + Supabase).
 - fiducia-cli.rs — `fiducia` CLI (closest-region probe, data-plane calls).
-- fiducia-telemetry.rs — shared OpenTelemetry init for services (stdout/OTLP;
-  NOT used by this MCP server because stdout is the MCP wire).
+- fiducia-telemetry.rs — shared OpenTelemetry + tracing init for services: one
+  init() wires JSON stdout logs plus OTLP/gRPC traces + metrics when
+  OTEL_EXPORTER_OTLP_ENDPOINT is set, with a built-in fiducia.service.starts
+  counter. Fleet-wide standard at tag v0.2.1 (OpenTelemetry 0.32 pipeline),
+  pinned by every Rust service. NOT used by this MCP server because stdout is
+  the MCP wire (it ships its own stdio-safe telemetry module instead).
 
 Infra, testing, meta:
 - fiducia-infra — multi-cluster Kubernetes (GCP + AWS + third platform),
@@ -128,9 +141,16 @@ touches Supabase; Supabase = dashboard identity/sessions only).
 
 ## Observability
 
-dd-prometheus:9090, dd-loki:3100, Grafana at /telemetry, OTLP :4317.
-Node exposes /v1/observe/{locks,semaphores,elections,shards,metrics};
-brain and memory expose /v1/status. No Alertmanager yet.
+Every Rust service shares fiducia-telemetry (tag v0.2.1, OpenTelemetry 0.32
+pipeline): one init() emits JSON stdout logs (node-collected -> Loki) and, when
+OTEL_EXPORTER_OTLP_ENDPOINT is set, OTLP/gRPC traces + metrics to a local
+collector -> Prometheus. A built-in fiducia.service.starts counter proves the
+service -> collector -> Prometheus path is live. This MCP server is the
+deliberate exception: it ships its own stdio-safe telemetry module because
+stdout is the MCP wire. dd-prometheus:9090, dd-loki:3100, Grafana at
+/telemetry, OTLP :4317. Node exposes
+/v1/observe/{locks,semaphores,elections,shards,metrics}; brain and memory
+expose /v1/status. No Alertmanager yet.
 
 ## Hosting
 

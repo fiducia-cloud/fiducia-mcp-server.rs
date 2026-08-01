@@ -14,7 +14,7 @@
 use serde_json::{json, Value};
 use std::time::Duration;
 
-use crate::upstream::{env_nonempty, urlencode};
+use crate::upstream::{env_nonempty, read_bounded_body, urlencode};
 
 pub const CF_TOKEN_ENV: &str = "CLOUDFLARE_API_TOKEN";
 pub const ALLOW_MUTATIONS_ENV: &str = "FIDUCIA_MCP_ALLOW_MUTATIONS";
@@ -55,6 +55,11 @@ impl Cloudflare {
     pub fn with_base(base: String, token: Option<String>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
+            // The Cloudflare API never legitimately redirects. Following one
+            // would let a redirect (from a proxy, misconfig, or a compromised
+            // hop) replay `Authorization: Bearer $CLOUDFLARE_API_TOKEN` to an
+            // attacker-chosen Location. Refuse to follow; surface it instead.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("reqwest client");
         Self {
@@ -93,12 +98,10 @@ impl Cloudflare {
             .await
             .map_err(|e| format!("Cloudflare request to {url} failed: {e}"))?;
         let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("reading Cloudflare response from {url} failed: {e}"))?;
-        let json: Value =
-            serde_json::from_str(&text).unwrap_or_else(|_| Value::String(text.clone()));
+        // Bound the body before parsing: never trust an upstream to be small.
+        let body = read_bounded_body(resp, &url).await?;
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&body).into_owned()));
         let success = json
             .get("success")
             .and_then(Value::as_bool)
@@ -244,10 +247,7 @@ impl Cloudflare {
     /// Delete a DNS record by explicit id. **Gated** by `FIDUCIA_MCP_ALLOW_MUTATIONS=1`.
     pub async fn dns_delete(&self, zone: &str, record_id: &str) -> Result<Value, String> {
         mutation_gate()?;
-        let record_id = record_id.trim();
-        if record_id.is_empty() {
-            return Err("`record_id` is required for cloudflare_dns_delete".to_string());
-        }
+        let record_id = validate_record_id(record_id)?;
         let id = self.zone_id(zone).await?;
         let path = format!("/zones/{id}/dns_records/{record_id}");
         let resp = self.send(reqwest::Method::DELETE, &path, None).await?;
@@ -279,6 +279,29 @@ fn mutation_gate() -> Result<(), String> {
 /// A Cloudflare zone id is 32 lowercase hex characters; a domain name is not.
 fn is_zone_id(s: &str) -> bool {
     s.len() == 32 && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Validate a DNS record id before it is interpolated into a request path
+/// (`/zones/{id}/dns_records/{record_id}`). Cloudflare ids are opaque tokens,
+/// so we allow only `[A-Za-z0-9_-]`: this rejects `/`, `.`/`..`, whitespace,
+/// and percent escapes, closing off path traversal / endpoint smuggling.
+fn validate_record_id(record_id: &str) -> Result<String, String> {
+    let record_id = record_id.trim();
+    if record_id.is_empty() {
+        return Err("`record_id` is required for cloudflare_dns_delete".to_string());
+    }
+    if record_id.len() > 128
+        || !record_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+    {
+        return Err(
+            "`record_id` must be an opaque Cloudflare record id ([A-Za-z0-9_-]); \
+             got a value with disallowed characters"
+                .to_string(),
+        );
+    }
+    Ok(record_id.to_string())
 }
 
 /// Pick the fields we expose for a DNS record.
@@ -685,5 +708,111 @@ mod tests {
         assert!(is_zone_id("0123456789abcdef0123456789abcdef"));
         assert!(!is_zone_id("fiducia.cloud"));
         assert!(!is_zone_id("0123456789abcdef")); // too short
+    }
+
+    #[test]
+    fn record_id_validation_blocks_path_traversal() {
+        // Opaque ids and the ids the tool table documents are accepted.
+        assert_eq!(
+            validate_record_id("  372e67954025e0ba6aaa6d586b9e0b59  ").unwrap(),
+            "372e67954025e0ba6aaa6d586b9e0b59"
+        );
+        assert_eq!(validate_record_id("rec-42").unwrap(), "rec-42");
+        // Anything that could climb out of the record path is rejected.
+        for bad in [
+            "",
+            "  ",
+            "../../zones",
+            "..",
+            "abc/def",
+            "abc%2f..",
+            "id with space",
+            "rec\nid",
+        ] {
+            assert!(
+                validate_record_id(bad).is_err(),
+                "record id {bad:?} must be rejected"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_rejects_traversal_record_id_before_any_call() {
+        let _g = MutationGuard::set(Some("1"));
+        let hit: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+        let hit2 = Arc::clone(&hit);
+        // Any request reaching the server flips the flag; the validator must
+        // fire first so nothing is ever sent upstream.
+        let app = Router::new().fallback(move || {
+            let hit = Arc::clone(&hit2);
+            async move {
+                *hit.lock().unwrap() = true;
+                Json(json!({ "success": true, "errors": [], "result": {} }))
+            }
+        });
+        let base = spawn(app).await;
+        let cf = Cloudflare::with_base(base, Some("test-token".into()));
+        let err = cf
+            .dns_delete("0123456789abcdef0123456789abcdef", "../../zones/other")
+            .await
+            .unwrap_err();
+        assert!(err.contains("record_id"), "explains the rejection: {err}");
+        assert!(!*hit.lock().unwrap(), "no HTTP call may be made");
+    }
+
+    #[tokio::test]
+    async fn oversized_cloudflare_body_is_rejected_before_parsing() {
+        // Well past the 4 MiB shared cap; must be refused, not buffered whole.
+        let app = Router::new().route("/zones", get(|| async { "x".repeat(5 * 1024 * 1024) }));
+        let base = spawn(app).await;
+        let cf = Cloudflare::with_base(base, Some("test-token".into()));
+        let err = cf.zones().await.unwrap_err();
+        assert!(
+            err.contains("exceeded"),
+            "oversized body must be capped: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn bearer_token_is_never_replayed_across_a_redirect() {
+        // A redirect must NOT be followed with the bearer token attached.
+        let leaked: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let leaked2 = Arc::clone(&leaked);
+        let app = Router::new()
+            .route(
+                "/zones",
+                get(|| async {
+                    (
+                        StatusCode::FOUND,
+                        [(reqwest::header::LOCATION.as_str(), "/leak")],
+                        "",
+                    )
+                }),
+            )
+            .route(
+                "/leak",
+                get(move |headers: HeaderMap| {
+                    let leaked = Arc::clone(&leaked2);
+                    async move {
+                        *leaked.lock().unwrap() = headers
+                            .get("authorization")
+                            .and_then(|v| v.to_str().ok())
+                            .map(str::to_string);
+                        Json(json!({ "success": true, "errors": [], "result": [] }))
+                    }
+                }),
+            );
+        let base = spawn(app).await;
+        let cf = Cloudflare::with_base(base, Some("super-secret-token".into()));
+        let err = cf.zones().await.unwrap_err();
+        assert!(
+            leaked.lock().unwrap().is_none(),
+            "the redirect endpoint must never be reached (token would leak): {:?}",
+            leaked.lock().unwrap()
+        );
+        assert!(
+            !err.contains("super-secret-token"),
+            "error must not leak the token: {err}"
+        );
     }
 }

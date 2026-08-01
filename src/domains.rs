@@ -18,6 +18,8 @@ use serde_json::{json, Value};
 use std::future::Future;
 use std::pin::Pin;
 
+use crate::upstream::read_bounded_body;
+
 pub const RDAP_BASE: &str = "https://rdap.org";
 
 /// GitHub Pages apex A records for a `*.github.io` site.
@@ -202,10 +204,7 @@ pub async fn registrar_status(
     rdap_base: &str,
     domain: &str,
 ) -> Result<Value, String> {
-    let domain = domain.trim().trim_end_matches('.');
-    if domain.is_empty() {
-        return Err("`domain` is required".to_string());
-    }
+    let domain = validate_domain(domain)?;
     let url = format!("{}/domain/{}", rdap_base.trim_end_matches('/'), domain);
     let resp = client
         .get(&url)
@@ -214,7 +213,7 @@ pub async fn registrar_status(
         .await
         .map_err(|e| format!("RDAP request to {url} failed: {e}"))?;
 
-    let resp = if resp.status().is_redirection() {
+    let (resp, final_url) = if resp.status().is_redirection() {
         let location = resp
             .headers()
             .get(reqwest::header::LOCATION)
@@ -226,27 +225,54 @@ pub async fn registrar_status(
                 )
             })?;
         let next = resolve_location(rdap_base, location);
-        client
+        let redirected = client
             .get(&next)
             .header("accept", "application/rdap+json")
             .send()
             .await
-            .map_err(|e| format!("RDAP redirect to {next} failed: {e}"))?
+            .map_err(|e| format!("RDAP redirect to {next} failed: {e}"))?;
+        (redirected, next)
     } else {
-        resp
+        (resp, url)
     };
 
     let status = resp.status();
-    let text = resp
-        .text()
-        .await
-        .map_err(|e| format!("reading RDAP response for {domain} failed: {e}"))?;
+    // Bound the RDAP body: the redirect target is chosen by the bootstrap
+    // server, so treat it as an untrusted upstream and cap what we read.
+    let body = read_bounded_body(resp, &final_url).await?;
     if !status.is_success() {
         return Err(format!("RDAP lookup for {domain} returned {status}"));
     }
     let json: Value =
-        serde_json::from_str(&text).map_err(|e| format!("RDAP response was not JSON: {e}"))?;
-    Ok(parse_rdap(domain, &json))
+        serde_json::from_slice(&body).map_err(|e| format!("RDAP response was not JSON: {e}"))?;
+    Ok(parse_rdap(&domain, &json))
+}
+
+/// Validate a domain before it is interpolated into the RDAP request path
+/// (`{base}/domain/{domain}`). Restricting to LDH characters (letters, digits,
+/// hyphen, dot) — with no empty labels — rejects `/`, `..`, whitespace, and
+/// scheme smuggling, so a crafted `domain` cannot traverse or escape the path.
+fn validate_domain(domain: &str) -> Result<String, String> {
+    let domain = domain.trim().trim_end_matches('.');
+    if domain.is_empty() {
+        return Err("`domain` is required".to_string());
+    }
+    if domain.len() > 253 {
+        return Err("`domain` is too long to be a valid domain name".to_string());
+    }
+    let valid_labels = domain.split('.').all(|label| {
+        !label.is_empty()
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    });
+    if !valid_labels {
+        return Err(format!(
+            "`domain` {domain:?} is not a valid domain name (letters, digits, \
+             hyphen, and dot only)"
+        ));
+    }
+    Ok(domain.to_ascii_lowercase())
 }
 
 /// Resolve an RDAP `Location` (absolute, or relative to the bootstrap base).
@@ -770,10 +796,70 @@ mod tests {
             .any(|s| s == "active"));
     }
 
+    #[tokio::test]
+    async fn oversized_rdap_body_is_rejected() {
+        // No redirect hop; the direct RDAP body is well past the 4 MiB cap.
+        let app = Router::new().route(
+            "/domain/{_d}",
+            get(|| async { "x".repeat(5 * 1024 * 1024) }),
+        );
+        let base = spawn(app).await;
+        let err = registrar_status(&no_redirect_client(), &base, "fiducia.cloud")
+            .await
+            .unwrap_err();
+        assert!(
+            err.contains("exceeded"),
+            "oversized RDAP body must be capped: {err}"
+        );
+    }
+
     #[test]
     fn resolve_location_absolute_and_relative() {
         assert_eq!(resolve_location("http://x", "https://y/z"), "https://y/z");
         assert_eq!(resolve_location("http://x/", "/a/b"), "http://x/a/b");
         assert_eq!(resolve_location("http://x", "a/b"), "http://x/a/b");
+    }
+
+    #[test]
+    fn validate_domain_accepts_names_and_rejects_traversal() {
+        assert_eq!(
+            validate_domain("  Fiducia.Cloud.  ").unwrap(),
+            "fiducia.cloud"
+        );
+        assert_eq!(
+            validate_domain("app.fiducia.cloud").unwrap(),
+            "app.fiducia.cloud"
+        );
+        // A crafted `domain` must never climb out of `/domain/{domain}`.
+        for bad in [
+            "",
+            "   ",
+            "../../secret",
+            "..",
+            "fiducia.cloud/../../x",
+            "foo/bar",
+            "has space.com",
+            "https://evil.example",
+            "under_score.com",
+            "a..b",
+        ] {
+            assert!(
+                validate_domain(bad).is_err(),
+                "domain {bad:?} must be rejected"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn registrar_status_rejects_traversal_domain() {
+        // Validation happens before any request, so an unroutable base is fine.
+        let err = registrar_status(
+            &no_redirect_client(),
+            "http://127.0.0.1:1",
+            "../../etc/passwd",
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("domain"), "explains the rejection: {err}");
     }
 }

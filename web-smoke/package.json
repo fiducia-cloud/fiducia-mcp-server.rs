@@ -1,0 +1,12 @@
+{
+  "name": "fiducia-cloud-web-smoke",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright browser-smoke for the fiducia.cloud marketing site. Not part of the Rust crate; run by .github/workflows/web-smoke.yml against the live web surface.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

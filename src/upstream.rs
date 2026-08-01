@@ -227,7 +227,15 @@ impl Upstream {
     }
 }
 
-async fn read_bounded_body(mut response: reqwest::Response, url: &str) -> Result<Vec<u8>, String> {
+/// Read a response body into memory, refusing anything past
+/// [`MAX_UPSTREAM_RESPONSE_BYTES`] — both via a declared `Content-Length` and
+/// while streaming chunks (so a lying or chunked upstream cannot blow past the
+/// cap). Shared by every raw HTTP reader in the crate (diagnostic planes,
+/// Cloudflare, RDAP) so no path can regress to an unbounded `text()`/`bytes()`.
+pub(crate) async fn read_bounded_body(
+    mut response: reqwest::Response,
+    url: &str,
+) -> Result<Vec<u8>, String> {
     if response
         .content_length()
         .is_some_and(|length| length > MAX_UPSTREAM_RESPONSE_BYTES as u64)

@@ -56,8 +56,16 @@ Identity, customer, admin:
   Crate/image/k8s still named fiducia-backend.
 - fiducia-admin.rs — operator-only admin dashboard (:8096; same MASH stack;
   WS /admin/ws streams fiducia-sync change frames). Accounts, API keys, infra.
-- fiducia-marketing.web — static Astro marketing site (GitHub Pages +
-  synced fallback into fiducia-customer.rs/static/).
+- fiducia-payments.rs — provider-agnostic payments library: Stripe + PayPal
+  webhook signature verification + event parsing. Pure crate (no HTTP server,
+  no DB; clock and I/O injected for offline unit tests); fiducia-customer.rs
+  mounts the routes and writes the billing tables from
+  fiducia-interfaces/sql/customer.sql.
+- fiducia-marketing.web — static Astro marketing site (renamed from
+  fiducia-ui.web 2026-07; GitHub Pages + synced fallback into
+  fiducia-customer.rs/static/).
+- fiducia-cloud.github.io — public marketing website: the org's GitHub Pages
+  site (Astro), served at fiducia.cloud.
 - fiducia-customer-ui.web — ARCHIVED legacy SPA; do not touch.
 
 AI-agent layer:

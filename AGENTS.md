@@ -54,7 +54,8 @@ README.md for the tool table and env configuration.
 - `src/k8s.rs` — read-only `kubectl` wrapper (argv builder, context validation,
   15s timeout, JSON summarizers). Tests stub `kubectl` via a temp script on `PATH`.
 - `src/repo_map.rs` — embedded org/architecture map served by `repo_map`.
-  **Update it when repos are added/renamed/archived** (last sync 2026-07).
+  **Update it when repos are added/renamed/archived** (last sync 2026-08-01).
+  Prose companion: `docs/platform-architecture.md`.
 
 ## Checks
 

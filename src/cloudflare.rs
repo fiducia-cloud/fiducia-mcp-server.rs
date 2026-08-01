@@ -98,12 +98,10 @@ impl Cloudflare {
             .await
             .map_err(|e| format!("Cloudflare request to {url} failed: {e}"))?;
         let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("reading Cloudflare response from {url} failed: {e}"))?;
-        let json: Value =
-            serde_json::from_str(&text).unwrap_or_else(|_| Value::String(text.clone()));
+        // Bound the body before parsing: never trust an upstream to be small.
+        let body = read_bounded_body(resp, &url).await?;
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&body).into_owned()));
         let success = json
             .get("success")
             .and_then(Value::as_bool)

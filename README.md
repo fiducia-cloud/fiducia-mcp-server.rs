@@ -8,6 +8,20 @@ without cloning every repo.
 Binary: `fiducia-mcp` — speaks MCP over **stdio** (stdout is the wire; all
 logs go to stderr).
 
+The binary audits `.cli-flags.toml` before telemetry or MCP startup. The only
+accepted process flag is `--log-filter`; upstream URLs, tenant identifiers,
+mutation gates, Kubernetes configuration, exporter settings, and every
+credential remain environment-only. Installed binaries discover the contract
+from the current directory, executable directory, or
+`../share/fiducia-mcp-server`; set `FIDUCIA_FLAGS_CONFIG` for an explicit path.
+
+Platform reference docs live in [`docs/`](docs/): where secrets/KV are
+persisted and how consumers ingest them ([secrets-and-kv.md](docs/secrets-and-kv.md)),
+NATS/JetStream design + hardening invariants ([nats-and-messaging.md](docs/nats-and-messaging.md)),
+and the admin/customer MASH web stacks + browser testing
+([web-stacks-and-testing.md](docs/web-stacks-and-testing.md)). The same facts
+in condensed form are served live by the `repo_map` tool.
+
 ## Tools
 
 Tools are **read-only by default**. The *only* exceptions are two Cloudflare
@@ -19,9 +33,9 @@ moving shards, releasing leases — deliberately stay with the real clients
 
 Node data-plane tools (`node_status`, `kv_get`, `lock_get`, `services`) go
 through the official Rust client — `fiducia-client`, a path dependency on the
-sibling checkout `../fiducia-clients/clients/rust` — in internal mode.
-`observe` (no client coverage), brain, the agent control plane, and bearer
-mode (the client cannot attach `Authorization`) use plain HTTP.
+sibling checkout `../fiducia-clients/clients/rust` — in both internal and
+bearer modes. `observe` uses the same client. Plain HTTP remains only for the
+brain, agent control plane, Cloudflare, RDAP, and other non-node APIs.
 
 | Tool | Upstream | What it answers |
 |---|---|---|
@@ -155,8 +169,30 @@ repos live side by side under the `fiducia.cloud` workspace or as
 `fiducia-monorepo/apps/*` submodules).
 
 ```sh
-cargo test
-cargo run   # then paste MCP JSON-RPC on stdin, e.g. an initialize request
+cargo test --locked
+cargo run --locked   # then paste MCP JSON-RPC on stdin, e.g. an initialize request
 ```
 
+## Container
+
+Build from this repository; the Docker build reproduces the sibling client
+dependency at its reviewed commit:
+
+```sh
+docker build --tag fiducia-mcp:local .
+```
+
+The runtime is an explicit non-root tool runner (UID/GID 65532) because the
+read-only Kubernetes diagnostics invoke a checksum-verified `kubectl`. The MCP
+server still communicates over stdio, and its stdout remains reserved for the
+MCP protocol.
+
 Built on the official Rust MCP SDK ([rmcp](https://crates.io/crates/rmcp)).
+
+## OpenTelemetry
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` to export explicit OTLP/gRPC traces and
+metrics; use `RUST_LOG` for filtering. Each MCP tool call gets a named span,
+call counter, duration histogram, and error flag. Arguments, results, and
+secrets are never recorded. JSON logs stay on stderr and stdout stays reserved
+for MCP framing. Instrumentation is explicit Rust code—no monkey patching.

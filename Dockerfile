@@ -1,0 +1,58 @@
+# syntax=docker/dockerfile:1@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89
+
+# Build context is this repository. The sibling client path dependency is
+# fetched at an immutable commit so standalone builds remain reproducible and
+# do not depend on a moving local checkout.
+FROM rust:1.97.1-slim-bookworm@sha256:99e09cb2284e2ddbb73a995deee3e91783fd04d177602ccf6eab326d778ee777 AS build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates
+WORKDIR /workspace
+ARG INTERFACES_REF=2c5c806174e067fbe83ad48b724366323ba390a2
+ARG CLIENTS_REF=5cd1a537f7ab98808ece4cdd09723be0bf49ce8b
+RUN git init fiducia-interfaces \
+    && git -C fiducia-interfaces remote add origin https://github.com/fiducia-cloud/fiducia-interfaces.git \
+    && git -C fiducia-interfaces fetch --depth 1 origin "$INTERFACES_REF" \
+    && git -C fiducia-interfaces checkout --detach FETCH_HEAD \
+    && test "$(git -C fiducia-interfaces rev-parse HEAD)" = "$INTERFACES_REF"
+RUN git init fiducia-clients \
+    && git -C fiducia-clients remote add origin https://github.com/fiducia-cloud/fiducia-clients.git \
+    && git -C fiducia-clients fetch --depth 1 origin "$CLIENTS_REF" \
+    && git -C fiducia-clients checkout --detach FETCH_HEAD \
+    && test "$(git -C fiducia-clients rev-parse HEAD)" = "$CLIENTS_REF"
+COPY . fiducia-mcp-server.rs/
+RUN cargo build --release --locked --manifest-path fiducia-mcp-server.rs/Cargo.toml \
+    && strip fiducia-mcp-server.rs/target/release/fiducia-mcp
+
+# Fetch kubectl in a disposable stage and verify the architecture-specific
+# upstream checksum before it enters the runtime image.
+FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS kubectl
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl
+ARG TARGETARCH
+ARG KUBECTL_VERSION=v1.34.1
+RUN case "$TARGETARCH" in \
+      amd64) checksum=7721f265e18709862655affba5343e85e1980639395d5754473dafaadcaa69e3 ;; \
+      arm64) checksum=420e6110e3ba7ee5a3927b5af868d18df17aae36b720529ffa4e9e945aa95450 ;; \
+      *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && curl --fail --location --silent --show-error \
+      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+      --output /tmp/kubectl \
+    && echo "$checksum  /tmp/kubectl" | sha256sum --check \
+    && chmod 0755 /tmp/kubectl
+
+# The MCP server shells out to kubectl for its read-only Kubernetes tools, so
+# this is an explicit non-root tool-runner rather than a distroless service.
+FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
+LABEL org.fiducia.runtime-profile="tool-runner-nonroot"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && groupadd --gid 65532 nonroot \
+    && useradd --uid 65532 --gid 65532 --home-dir /home/nonroot --create-home \
+      --shell /usr/sbin/nologin nonroot
+COPY --from=kubectl --chown=65532:65532 /tmp/kubectl /usr/local/bin/kubectl
+COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/target/release/fiducia-mcp /usr/local/bin/fiducia-mcp
+COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/.cli-flags.toml /usr/local/share/fiducia-mcp-server/.cli-flags.toml
+ENV HOME=/home/nonroot
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/fiducia-mcp"]

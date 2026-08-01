@@ -24,6 +24,12 @@ pub const API_KEY_ENV: &str = "FIDUCIA_API_KEY";
 
 const DEFAULT_NODE_URL: &str = "http://localhost:8090";
 const DEFAULT_BRAIN_URL: &str = "http://localhost:8095";
+/// Diagnostic tools should never need multi-megabyte control-plane responses.
+/// Bound both successful and error bodies, including chunked transfer encoding.
+const MAX_UPSTREAM_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+/// The blocking SDK owns its own response buffering, so cap what can be surfaced
+/// to the model even when an upstream returns a very large structured error.
+const MAX_CLIENT_ERROR_BODY_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Plane {
@@ -64,20 +70,18 @@ impl Config {
     }
 
     pub fn base_url(&self, plane: Plane) -> Result<&str, String> {
-        match plane {
-            Plane::Node => Ok(self.node_url.trim_end_matches('/')),
-            Plane::Brain => Ok(self.brain_url.trim_end_matches('/')),
-            Plane::AgentControlPlane => self
-                .agent_cp_url
-                .as_deref()
-                .map(|u| u.trim_end_matches('/'))
-                .ok_or_else(|| {
-                    format!(
-                        "{AGENT_CP_URL_ENV} is not set; point it at the \
+        let url = match plane {
+            Plane::Node => self.node_url.as_str(),
+            Plane::Brain => self.brain_url.as_str(),
+            Plane::AgentControlPlane => self.agent_cp_url.as_deref().ok_or_else(|| {
+                format!(
+                    "{AGENT_CP_URL_ENV} is not set; point it at the \
                          fiducia-ai-agent-control-plane base URL to use file-lease tools"
-                    )
-                }),
-        }
+                )
+            })?,
+        };
+        validate_base_url(url)?;
+        Ok(url.trim_end_matches('/'))
     }
 
     /// Headers to attach for a given plane, as (name, value) pairs.
@@ -126,10 +130,9 @@ impl Config {
 
 pub struct Upstream {
     client: reqwest::Client,
-    /// Official Rust client for the node data plane, present in internal mode
-    /// (secret + org id, no API key). Blocking (ureq), so every call runs on
-    /// spawn_blocking. Bearer mode keeps raw HTTP: fiducia-client has no way
-    /// to attach an Authorization header.
+    /// Official Rust client for the node data plane in either internal or
+    /// bearer mode. It is blocking (`ureq`), so every call runs on
+    /// `spawn_blocking`.
     node_client: Option<Arc<FiduciaClient>>,
     pub config: Config,
 }
@@ -137,11 +140,21 @@ pub struct Upstream {
 impl Upstream {
     pub fn new(config: Config) -> Self {
         let client = reqwest::Client::builder()
+            // No diagnostic request needs to follow a redirect. In particular,
+            // brain/control-plane trusted-hop headers must never be replayed to
+            // a Location chosen by an upstream peer.
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
             .build()
             .expect("reqwest client");
         let node_client = match (&config.api_key, &config.internal_secret, &config.org_id) {
-            (None, Some(secret), Some(org)) => {
+            (Some(api_key), _, _) if validate_base_url(&config.node_url).is_ok() => {
+                let mut c = FiduciaClient::bearer(&config.node_url, api_key);
+                c.request_timeout = Some(Duration::from_secs(15));
+                Some(Arc::new(c))
+            }
+            (None, Some(secret), Some(org)) if validate_base_url(&config.node_url).is_ok() => {
                 let mut c = FiduciaClient::internal(&config.node_url, secret, org);
                 c.request_timeout = Some(Duration::from_secs(15));
                 Some(Arc::new(c))
@@ -155,10 +168,10 @@ impl Upstream {
         }
     }
 
-    /// Call the node data plane. Internal mode goes through fiducia-client on
-    /// the blocking pool; otherwise (bearer mode, or unconfigured — which
-    /// yields the guidance error from `headers`) falls back to a raw GET of
-    /// `fallback_path`.
+    /// Call the node data plane through `fiducia-client` on the blocking pool.
+    /// An unconfigured server falls back only to produce the existing
+    /// credential guidance from `headers` without attempting an unauthenticated
+    /// SDK request.
     pub async fn node_call<F>(
         &self,
         call: F,
@@ -169,6 +182,7 @@ impl Upstream {
             + Send
             + 'static,
     {
+        validate_base_url(&self.config.node_url)?;
         match &self.node_client {
             Some(node_client) => {
                 let node_client = Arc::clone(node_client);
@@ -183,7 +197,7 @@ impl Upstream {
 
     /// GET `<plane base>/<path_and_query>` with the plane's auth headers and
     /// return the response body as JSON. Non-2xx responses are reported as
-    /// errors but still carry the upstream body — services here return
+    /// errors but still carry a bounded upstream body — services here return
     /// structured JSON errors worth showing to the model.
     pub async fn get_json(
         &self,
@@ -201,12 +215,10 @@ impl Upstream {
             .await
             .map_err(|e| format!("request to {url} failed: {e}"))?;
         let status = resp.status();
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| format!("reading response from {url} failed: {e}"))?;
-        let json: serde_json::Value =
-            serde_json::from_str(&body).unwrap_or_else(|_| serde_json::Value::String(body.clone()));
+        let body = read_bounded_body(resp, &url).await?;
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap_or_else(|_| {
+            serde_json::Value::String(String::from_utf8_lossy(&body).into_owned())
+        });
         if status.is_success() {
             Ok(json)
         } else {
@@ -215,18 +227,105 @@ impl Upstream {
     }
 }
 
+/// Read a response body into memory, refusing anything past
+/// [`MAX_UPSTREAM_RESPONSE_BYTES`] — both via a declared `Content-Length` and
+/// while streaming chunks (so a lying or chunked upstream cannot blow past the
+/// cap). Shared by every raw HTTP reader in the crate (diagnostic planes,
+/// Cloudflare, RDAP) so no path can regress to an unbounded `text()`/`bytes()`.
+pub(crate) async fn read_bounded_body(
+    mut response: reqwest::Response,
+    url: &str,
+) -> Result<Vec<u8>, String> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_UPSTREAM_RESPONSE_BYTES as u64)
+    {
+        return Err(format!(
+            "response from {url} exceeded {MAX_UPSTREAM_RESPONSE_BYTES} bytes"
+        ));
+    }
+
+    let initial_capacity = response
+        .content_length()
+        .unwrap_or_default()
+        .min(MAX_UPSTREAM_RESPONSE_BYTES as u64) as usize;
+    let mut body = Vec::with_capacity(initial_capacity);
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| format!("reading response from {url} failed: {error}"))?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_UPSTREAM_RESPONSE_BYTES {
+            return Err(format!(
+                "response from {url} exceeded {MAX_UPSTREAM_RESPONSE_BYTES} bytes"
+            ));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+fn validate_base_url(raw: &str) -> Result<(), String> {
+    let raw = raw.trim();
+    if raw.len() > 2_048 || raw.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("upstream base URL contains invalid characters".to_string());
+    }
+    let parsed =
+        reqwest::Url::parse(raw).map_err(|_| "upstream base URL is invalid".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host().is_none() {
+        return Err("upstream base URL must use http(s) and include a host".to_string());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("upstream base URL must not contain credentials".to_string());
+    }
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err("upstream base URL must not contain a query or fragment".to_string());
+    }
+    let host = parsed.host_str().unwrap_or_default();
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        let blocked = match ip {
+            std::net::IpAddr::V4(ip) => ip.is_link_local() || ip.is_unspecified(),
+            std::net::IpAddr::V6(ip) => ip.is_unicast_link_local() || ip.is_unspecified(),
+        };
+        if blocked {
+            return Err("cloud metadata endpoints are not allowed".to_string());
+        }
+    }
+    if matches!(
+        host.trim_end_matches('.').to_ascii_lowercase().as_str(),
+        "metadata.google.internal" | "metadata.azure.internal"
+    ) {
+        return Err("cloud metadata endpoints are not allowed".to_string());
+    }
+    Ok(())
+}
+
 /// Render a fiducia-client error the same way `get_json` renders raw HTTP
-/// failures: keep the upstream JSON body — it's structured and worth showing.
+/// failures, but cap the body before exposing it to a model/tool caller.
 fn format_client_error(err: fiducia_client::Error) -> String {
     match err {
         fiducia_client::Error::Http { status, body } => {
             let body = body
-                .map(|b| b.to_string())
+                .map(|b| truncate_utf8(b.to_string(), MAX_CLIENT_ERROR_BODY_BYTES))
                 .unwrap_or_else(|| "(empty body)".to_string());
             format!("node returned {status}: {body}")
         }
         fiducia_client::Error::Transport(message) => format!("node request failed: {message}"),
     }
+}
+
+fn truncate_utf8(mut value: String, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value;
+    }
+    const SUFFIX: &str = "…[truncated]";
+    let mut end = max_bytes.saturating_sub(SUFFIX.len());
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value.truncate(end);
+    value.push_str(SUFFIX);
+    value
 }
 
 /// Percent-encode a value for use inside a query string.
@@ -318,20 +417,49 @@ mod tests {
     }
 
     #[test]
-    fn node_client_built_in_internal_mode_only() {
+    fn node_client_is_built_for_internal_and_bearer_modes() {
         assert!(Upstream::new(cfg()).node_client.is_some());
 
         let mut bearer = cfg();
         bearer.api_key = Some("fk_live_abc".into());
         assert!(
-            Upstream::new(bearer).node_client.is_none(),
-            "bearer mode must bypass fiducia-client (no Authorization support)"
+            Upstream::new(bearer).node_client.is_some(),
+            "bearer mode must use the canonical SDK"
         );
 
         let mut bare = cfg();
         bare.internal_secret = None;
         bare.control_plane_secret = None;
         assert!(Upstream::new(bare).node_client.is_none());
+    }
+
+    #[tokio::test]
+    async fn raw_upstream_response_is_bounded_before_json_parsing() {
+        let app = axum::Router::new().route(
+            "/huge",
+            axum::routing::get(|| async { "x".repeat(MAX_UPSTREAM_RESPONSE_BYTES + 1) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let mut config = cfg();
+        config.brain_url = format!("http://{address}");
+        let error = Upstream::new(config)
+            .get_json(Plane::Brain, "/huge")
+            .await
+            .unwrap_err();
+        assert!(error.contains("exceeded"));
+        assert!(error.contains(&MAX_UPSTREAM_RESPONSE_BYTES.to_string()));
+    }
+
+    #[test]
+    fn client_error_truncation_preserves_utf8_and_bound() {
+        let value = "é".repeat(MAX_CLIENT_ERROR_BODY_BYTES);
+        let truncated = truncate_utf8(value, MAX_CLIENT_ERROR_BODY_BYTES);
+        assert!(truncated.is_char_boundary(truncated.len()));
+        assert!(truncated.ends_with("[truncated]"));
+        assert!(truncated.len() <= MAX_CLIENT_ERROR_BODY_BYTES);
     }
 
     #[test]

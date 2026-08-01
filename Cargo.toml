@@ -20,26 +20,30 @@ rmcp = { version = "2.2", features = ["server", "macros", "schemars", "transport
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "signal", "time", "process"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+flags2env = { git = "https://github.com/ORESoftware/flags-2-env.git", rev = "377bff1a4e7424eb98377997a232ddc0fc700f59" }
+opentelemetry = "0.27"
+opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "metrics", "trace"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
 tracing = "0.1"
-# Logs MUST go to stderr: stdout is the MCP wire. fiducia-telemetry writes to
-# stdout, so this crate deliberately does not use it.
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Logs MUST go to stderr: stdout is the MCP wire. This crate uses its explicit
+# stdio-safe telemetry module instead of the stdout-oriented shared fallback.
+tracing-opentelemetry = "0.28"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 
 # Official Rust client for the node data plane (blocking, ureq) — the same
 # crate fiducia-ai-agent-control-plane uses; calls run on spawn_blocking.
 # Sibling-checkout path dep, the org convention (cf. fiducia-interfaces).
 fiducia-client = { path = "../fiducia-clients/clients/rust" }
 
-# Talking to brain (:8095), the ai-agent control plane, node /v1/observe/*
-# (not part of the official client surface), the LB in bearer mode, the
-# Cloudflare v4 API, and RDAP servers.
+# Talking to brain (:8095), the ai-agent control plane, Cloudflare v4, and RDAP
+# servers. All node data-plane reads use fiducia-client in both auth modes.
 # rustls so the server can also point at the LB over HTTPS.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # dns_check: async DNS lookups — system resolver config with a fallback to
 # Cloudflare 1.1.1.1 + Google 8.8.8.8. Abstracted behind `domains::Resolve`
 # so tests inject a mock and stay offline.
-hickory-resolver = "0.25"
+hickory-resolver = "0.26.1"
 
 [dev-dependencies]
 # Offline mock upstreams (Cloudflare API envelope, RDAP redirect hop) bound

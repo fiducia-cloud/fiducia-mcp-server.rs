@@ -5,7 +5,7 @@
 //! fiducia-cli) where fencing tokens are handled properly.
 
 use rmcp::{
-    handler::server::wrapper::Parameters,
+    handler::server::{tool::ToolRouter, wrapper::Parameters},
     model::{
         CallToolResult, ContentBlock, Implementation, ProtocolVersion, ServerCapabilities,
         ServerInfo,
@@ -180,6 +180,7 @@ pub struct FiduciaMcp {
     /// Dedicated client for RDAP: redirects disabled so we follow exactly one
     /// hop from the bootstrap server ourselves.
     rdap_client: reqwest::Client,
+    tool_router: ToolRouter<Self>,
 }
 
 fn ok_json(value: serde_json::Value) -> CallToolResult {
@@ -210,6 +211,7 @@ impl FiduciaMcp {
             upstream: Arc::new(upstream),
             cloudflare: Arc::new(Cloudflare::from_env()),
             rdap_client,
+            tool_router: crate::telemetry::instrument_tool_router(Self::tool_router()),
         }
     }
 
@@ -285,7 +287,7 @@ impl FiduciaMcp {
         }
         render(
             self.upstream
-                .get_json(Plane::Node, &format!("/v1/observe/{what}"))
+                .node_call(move |client| client.observe(&what), "/v1/observe")
                 .await,
         )
     }
@@ -387,7 +389,14 @@ impl FiduciaMcp {
 
     #[tool(
         description = "List Cloudflare zones on the account: name, id, status, \
-                       nameservers. GET Cloudflare /zones."
+                       nameservers. GET Cloudflare /zones.",
+        annotations(
+            title = "List Cloudflare zones",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_zones(&self) -> Result<CallToolResult, McpError> {
         render(self.cloudflare.zones().await)
@@ -395,7 +404,14 @@ impl FiduciaMcp {
 
     #[tool(
         description = "List DNS records in a Cloudflare zone (accepts a zone name or \
-                       id), following pagination → [{id,type,name,content,proxied,ttl}]."
+                       id), following pagination → [{id,type,name,content,proxied,ttl}].",
+        annotations(
+            title = "List Cloudflare DNS records",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_dns_records(
         &self,
@@ -407,7 +423,14 @@ impl FiduciaMcp {
     #[tool(
         description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): create or \
                        update a DNS record, matched on (type, name). Allowed types: \
-                       A/AAAA/CNAME/TXT/MX. POST if absent, else PUT."
+                       A/AAAA/CNAME/TXT/MX. POST if absent, else PUT.",
+        annotations(
+            title = "Create or update Cloudflare DNS record",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_dns_upsert(
         &self,
@@ -429,7 +452,14 @@ impl FiduciaMcp {
 
     #[tool(
         description = "MUTATION (gated by FIDUCIA_MCP_ALLOW_MUTATIONS=1): delete a DNS \
-                       record by explicit id in a Cloudflare zone."
+                       record by explicit id in a Cloudflare zone.",
+        annotations(
+            title = "Delete Cloudflare DNS record",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn cloudflare_dns_delete(
         &self,
@@ -555,7 +585,7 @@ impl FiduciaMcp {
     }
 }
 
-#[tool_handler]
+#[tool_handler(router = self.tool_router)]
 impl ServerHandler for FiduciaMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
@@ -626,6 +656,34 @@ mod tests {
     }
 
     #[test]
+    fn cloudflare_tool_annotations_distinguish_reads_from_gated_writes() {
+        let router = FiduciaMcp::tool_router();
+        let tools = router.list_all();
+        let tool = |name: &str| {
+            tools
+                .iter()
+                .find(|tool| tool.name.as_ref() == name)
+                .unwrap_or_else(|| panic!("missing tool {name}"))
+        };
+
+        for name in ["cloudflare_zones", "cloudflare_dns_records"] {
+            let annotations = tool(name).annotations.as_ref().expect("annotations");
+            assert_eq!(annotations.read_only_hint, Some(true));
+            assert_eq!(annotations.destructive_hint, Some(false));
+            assert_eq!(annotations.idempotent_hint, Some(true));
+            assert_eq!(annotations.open_world_hint, Some(true));
+        }
+
+        for name in ["cloudflare_dns_upsert", "cloudflare_dns_delete"] {
+            let annotations = tool(name).annotations.as_ref().expect("annotations");
+            assert_eq!(annotations.read_only_hint, Some(false));
+            assert_eq!(annotations.destructive_hint, Some(true));
+            assert_eq!(annotations.idempotent_hint, Some(true));
+            assert_eq!(annotations.open_world_hint, Some(true));
+        }
+    }
+
+    #[test]
     fn repo_map_is_served_verbatim() {
         let result = server().repo_map().unwrap();
         assert_ne!(result.is_error, Some(true));
@@ -661,6 +719,63 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(neither.is_error, Some(true));
+    }
+
+    /// stdout/stdin is the MCP wire: one garbage line from a confused client
+    /// must not kill the service loop. Serve the real handler over an
+    /// in-memory duplex, feed it a non-JSON line followed by a valid
+    /// `initialize` request, and require a correct response to the latter.
+    #[tokio::test]
+    async fn garbage_stdio_line_is_ignored_and_next_request_served() {
+        use rmcp::ServiceExt;
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+        let (client_read, mut client_write) = tokio::io::split(client_io);
+
+        let service = tokio::spawn(async move { server().serve(server_io).await });
+
+        client_write
+            .write_all(b"this is not json {{{\n")
+            .await
+            .unwrap();
+        let init = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": serde_json::to_value(ProtocolVersion::LATEST).unwrap(),
+                "capabilities": {},
+                "clientInfo": { "name": "loop-test", "version": "0.0.0" },
+            },
+        });
+        client_write
+            .write_all(format!("{init}\n").as_bytes())
+            .await
+            .unwrap();
+
+        let mut lines = BufReader::new(client_read).lines();
+        let line = tokio::time::timeout(std::time::Duration::from_secs(10), lines.next_line())
+            .await
+            .expect("server did not answer within deadline")
+            .expect("read error on client side")
+            .expect("server closed the stream after a garbage line");
+        let reply: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(
+            reply["id"], 1,
+            "response must correlate to the valid request"
+        );
+        assert!(
+            reply.get("error").is_none(),
+            "valid initialize after a garbage line must not error: {reply}"
+        );
+        assert_eq!(
+            reply["result"]["serverInfo"]["name"],
+            env!("CARGO_PKG_NAME"),
+            "initialize must return this server's identity"
+        );
+
+        service.abort();
     }
 
     #[tokio::test]

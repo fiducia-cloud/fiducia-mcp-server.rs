@@ -55,6 +55,11 @@ impl Cloudflare {
     pub fn with_base(base: String, token: Option<String>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
+            // The Cloudflare API never legitimately redirects. Following one
+            // would let a redirect (from a proxy, misconfig, or a compromised
+            // hop) replay `Authorization: Bearer $CLOUDFLARE_API_TOKEN` to an
+            // attacker-chosen Location. Refuse to follow; surface it instead.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("reqwest client");
         Self {

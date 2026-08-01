@@ -204,10 +204,7 @@ pub async fn registrar_status(
     rdap_base: &str,
     domain: &str,
 ) -> Result<Value, String> {
-    let domain = domain.trim().trim_end_matches('.');
-    if domain.is_empty() {
-        return Err("`domain` is required".to_string());
-    }
+    let domain = validate_domain(domain)?;
     let url = format!("{}/domain/{}", rdap_base.trim_end_matches('/'), domain);
     let resp = client
         .get(&url)
@@ -216,7 +213,7 @@ pub async fn registrar_status(
         .await
         .map_err(|e| format!("RDAP request to {url} failed: {e}"))?;
 
-    let resp = if resp.status().is_redirection() {
+    let (resp, final_url) = if resp.status().is_redirection() {
         let location = resp
             .headers()
             .get(reqwest::header::LOCATION)
@@ -228,27 +225,27 @@ pub async fn registrar_status(
                 )
             })?;
         let next = resolve_location(rdap_base, location);
-        client
+        let redirected = client
             .get(&next)
             .header("accept", "application/rdap+json")
             .send()
             .await
-            .map_err(|e| format!("RDAP redirect to {next} failed: {e}"))?
+            .map_err(|e| format!("RDAP redirect to {next} failed: {e}"))?;
+        (redirected, next)
     } else {
-        resp
+        (resp, url)
     };
 
     let status = resp.status();
-    let text = resp
-        .text()
-        .await
-        .map_err(|e| format!("reading RDAP response for {domain} failed: {e}"))?;
+    // Bound the RDAP body: the redirect target is chosen by the bootstrap
+    // server, so treat it as an untrusted upstream and cap what we read.
+    let body = read_bounded_body(resp, &final_url).await?;
     if !status.is_success() {
         return Err(format!("RDAP lookup for {domain} returned {status}"));
     }
     let json: Value =
-        serde_json::from_str(&text).map_err(|e| format!("RDAP response was not JSON: {e}"))?;
-    Ok(parse_rdap(domain, &json))
+        serde_json::from_slice(&body).map_err(|e| format!("RDAP response was not JSON: {e}"))?;
+    Ok(parse_rdap(&domain, &json))
 }
 
 /// Resolve an RDAP `Location` (absolute, or relative to the bootstrap base).

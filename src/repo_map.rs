@@ -97,8 +97,12 @@ Messaging, clients, interfaces:
   backend WS/SSE transports, hx-ext="fiducia-optimistic" HTMX extension),
   and the fiducia_sync Dart/Flutter package (SQLite + Supabase).
 - fiducia-cli.rs — `fiducia` CLI (closest-region probe, data-plane calls).
-- fiducia-telemetry.rs — shared OpenTelemetry init for services (stdout/OTLP;
-  NOT used by this MCP server because stdout is the MCP wire).
+- fiducia-telemetry.rs — shared OpenTelemetry + tracing init for services: one
+  init() wires JSON stdout logs plus OTLP/gRPC traces + metrics when
+  OTEL_EXPORTER_OTLP_ENDPOINT is set, with a built-in fiducia.service.starts
+  counter. Fleet-wide standard at tag v0.2.1 (OpenTelemetry 0.32 pipeline),
+  pinned by every Rust service. NOT used by this MCP server because stdout is
+  the MCP wire (it ships its own stdio-safe telemetry module instead).
 
 Infra, testing, meta:
 - fiducia-infra — multi-cluster Kubernetes (GCP + AWS + third platform),

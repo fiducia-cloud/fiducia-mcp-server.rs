@@ -2,8 +2,9 @@
 """Black-box MCP stdio lifecycle test for the built container image.
 
 The test intentionally supplies no credentials and calls only the embedded,
-read-only repo_map tool. It validates protocol framing and dispatch without
-contacting node, brain, Cloudflare, DNS, Kubernetes, or any production system.
+read-only repo_map tool. It validates protocol framing, notification silence,
+post-error recovery, and clean EOF shutdown without contacting node, brain,
+Cloudflare, DNS, Kubernetes, or any production system.
 """
 
 from __future__ import annotations
@@ -14,13 +15,14 @@ import sys
 from typing import Any
 
 
-ALLOWED_EXIT_CODES = {0, 1, 124}
+PROTOCOL_VERSION = "2025-06-18"
 REQUIRED_TOOLS = {
     "repo_map",
     "node_status",
     "cloudflare_dns_upsert",
     "cloudflare_dns_delete",
 }
+EXPECTED_RESPONSE_IDS = {1, 2, 3, 4, 5, 6}
 
 
 def fail(message: str, *, stdout: str = "", stderr: str = "") -> "NoReturn":
@@ -41,6 +43,18 @@ def response_by_id(messages: list[dict[str, Any]], request_id: int) -> dict[str,
     return matches[0]
 
 
+def successful_response(
+    messages: list[dict[str, Any]], request_id: int, method: str
+) -> dict[str, Any]:
+    response = response_by_id(messages, request_id)
+    if "result" not in response or "error" in response:
+        fail(f"{method} did not succeed")
+    result = response["result"]
+    if not isinstance(result, dict):
+        fail(f"{method} returned a non-object result")
+    return result
+
+
 def run(image: str) -> None:
     frames = [
         {
@@ -48,7 +62,7 @@ def run(image: str) -> None:
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {},
                 "clientInfo": {"name": "fiducia-mcp-ci", "version": "1.0"},
             },
@@ -72,13 +86,15 @@ def run(image: str) -> None:
             "method": "fiducia/definitely-unknown",
             "params": {},
         },
+        # A second ping after the typed protocol error proves the same process
+        # remains responsive rather than merely producing an error frame.
+        {"jsonrpc": "2.0", "id": 6, "method": "ping", "params": {}},
     ]
     payload = "".join(
         f"{json.dumps(frame, separators=(',', ':'))}\n" for frame in frames
     )
 
     command = ["docker", "run", "--rm", "-i", image, "--log-filter=debug"]
-    timed_out = False
     try:
         completed = subprocess.run(
             command,
@@ -88,18 +104,18 @@ def run(image: str) -> None:
             timeout=20,
             check=False,
         )
-        stdout = completed.stdout
-        stderr = completed.stderr
-        returncode = completed.returncode
     except subprocess.TimeoutExpired as error:
-        timed_out = True
-        stdout = _as_text(error.stdout)
-        stderr = _as_text(error.stderr)
-        returncode = 124
-
-    if returncode not in ALLOWED_EXIT_CODES:
         fail(
-            f"container exited with unsupported status {returncode}",
+            "container did not exit cleanly after stdin EOF",
+            stdout=_as_text(error.stdout),
+            stderr=_as_text(error.stderr),
+        )
+
+    stdout = completed.stdout
+    stderr = completed.stderr
+    if completed.returncode != 0:
+        fail(
+            f"container did not exit cleanly (status {completed.returncode})",
             stdout=stdout,
             stderr=stderr,
         )
@@ -127,19 +143,57 @@ def run(image: str) -> None:
     if not messages:
         fail("server emitted no protocol messages", stdout=stdout, stderr=stderr)
 
-    initialize = response_by_id(messages, 1)
-    if "result" not in initialize or "error" in initialize:
-        fail("initialize did not succeed", stdout=stdout, stderr=stderr)
-    server_info = initialize["result"].get("serverInfo", {})
-    if not server_info.get("name") or not server_info.get("version"):
+    response_ids = [message.get("id") for message in messages]
+    if any(request_id is None for request_id in response_ids):
+        fail(
+            "server emitted an unsolicited or notification response without an id",
+            stdout=stdout,
+            stderr=stderr,
+        )
+    if set(response_ids) != EXPECTED_RESPONSE_IDS or len(response_ids) != len(
+        EXPECTED_RESPONSE_IDS
+    ):
+        fail(
+            f"expected exactly response ids {sorted(EXPECTED_RESPONSE_IDS)}, got {response_ids}",
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    initialize = successful_response(messages, 1, "initialize")
+    if initialize.get("protocolVersion") != PROTOCOL_VERSION:
+        fail(
+            "initialize did not negotiate the requested supported protocol version",
+            stdout=stdout,
+            stderr=stderr,
+        )
+    if not isinstance(initialize.get("capabilities"), dict):
+        fail("initialize omitted capabilities", stdout=stdout, stderr=stderr)
+    server_info = initialize.get("serverInfo", {})
+    if not isinstance(server_info, dict) or not server_info.get("name") or not server_info.get(
+        "version"
+    ):
         fail("initialize omitted serverInfo name/version", stdout=stdout, stderr=stderr)
 
-    tools_response = response_by_id(messages, 2)
-    tools = tools_response.get("result", {}).get("tools")
+    tools_response = successful_response(messages, 2, "tools/list")
+    tools = tools_response.get("tools")
     if not isinstance(tools, list):
         fail("tools/list did not return a tools array", stdout=stdout, stderr=stderr)
-    tool_names = {tool.get("name") for tool in tools if isinstance(tool, dict)}
-    missing_tools = sorted(REQUIRED_TOOLS - tool_names)
+    tool_names = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            fail("tools/list contains a non-object tool", stdout=stdout, stderr=stderr)
+        name = tool.get("name")
+        if not isinstance(name, str) or not name:
+            fail("tools/list contains a tool without a name", stdout=stdout, stderr=stderr)
+        if not isinstance(tool.get("description"), str) or not tool["description"].strip():
+            fail(f"tool {name} has no description", stdout=stdout, stderr=stderr)
+        input_schema = tool.get("inputSchema")
+        if not isinstance(input_schema, dict) or input_schema.get("type") != "object":
+            fail(f"tool {name} has no object input schema", stdout=stdout, stderr=stderr)
+        tool_names.append(name)
+    if len(tool_names) != len(set(tool_names)):
+        fail("tools/list contains duplicate names", stdout=stdout, stderr=stderr)
+    missing_tools = sorted(REQUIRED_TOOLS - set(tool_names))
     if missing_tools:
         fail(
             f"tools/list is missing required tools: {', '.join(missing_tools)}",
@@ -147,11 +201,10 @@ def run(image: str) -> None:
             stderr=stderr,
         )
 
-    repo_map = response_by_id(messages, 3)
-    repo_map_result = repo_map.get("result", {})
-    if repo_map_result.get("isError") is True:
+    repo_map = successful_response(messages, 3, "repo_map")
+    if repo_map.get("isError") is True:
         fail("repo_map unexpectedly returned isError=true", stdout=stdout, stderr=stderr)
-    content = repo_map_result.get("content")
+    content = repo_map.get("content")
     if not isinstance(content, list) or not content:
         fail("repo_map returned no MCP content", stdout=stdout, stderr=stderr)
     text = "\n".join(
@@ -162,9 +215,7 @@ def run(image: str) -> None:
     if "fiducia" not in text.lower():
         fail("repo_map content does not identify Fiducia", stdout=stdout, stderr=stderr)
 
-    ping = response_by_id(messages, 4)
-    if "result" not in ping or "error" in ping:
-        fail("MCP ping did not succeed", stdout=stdout, stderr=stderr)
+    successful_response(messages, 4, "ping before protocol error")
 
     unknown = response_by_id(messages, 5)
     error = unknown.get("error")
@@ -175,6 +226,8 @@ def run(image: str) -> None:
             stderr=stderr,
         )
 
+    successful_response(messages, 6, "ping after protocol error")
+
     lowered_stderr = stderr.lower()
     forbidden_stderr = [
         "panicked at",
@@ -182,6 +235,7 @@ def run(image: str) -> None:
         "backtrace:",
         "fiducia_api_key=",
         "cloudflare_api_token=",
+        "authorization: bearer",
     ]
     leaked = [needle for needle in forbidden_stderr if needle in lowered_stderr]
     if leaked:
@@ -193,7 +247,7 @@ def run(image: str) -> None:
 
     print(
         "MCP stdio lifecycle passed "
-        f"({len(messages)} messages, {len(tools)} tools, timed_out={timed_out})"
+        f"({len(messages)} responses, {len(tools)} unique tools, clean_exit=true)"
     )
 
 

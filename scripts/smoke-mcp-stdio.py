@@ -3,16 +3,17 @@
 
 The test intentionally supplies no credentials and calls only the embedded,
 read-only repo_map tool. It validates protocol framing, notification silence,
-post-error recovery, and clean EOF shutdown without contacting node, brain,
-Cloudflare, DNS, Kubernetes, or any production system.
+post-error recovery, clean EOF shutdown, structured stderr, and the absence of
+credential-shaped values without rejecting redacted documentation strings.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
-from typing import Any
+from typing import Any, NoReturn
 
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -24,8 +25,51 @@ REQUIRED_TOOLS = {
 }
 EXPECTED_RESPONSE_IDS = {1, 2, 3, 4, 5, 6}
 
+CRASH_MARKERS = (
+    "panicked at",
+    "thread 'main' panicked",
+    "backtrace:",
+)
+CREDENTIAL_PATTERNS = (
+    (
+        "GitHub personal access token",
+        re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"),
+    ),
+    (
+        "Fiducia live/test credential",
+        re.compile(r"\bfdc_(?:live|test)_[A-Za-z0-9_.-]{8,}\b", re.IGNORECASE),
+    ),
+    (
+        "private key",
+        re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.IGNORECASE),
+    ),
+    (
+        "bearer credential",
+        # Documentation such as "bearer auth" and explicitly redacted
+        # "Bearer ***" examples are not credentials. Real bearer values are
+        # expected to be substantially longer than an ordinary word.
+        re.compile(
+            r"\bauthorization\s*:\s*bearer\s+"
+            r"(?!\*{3}(?:\s|$)|<redacted>(?:\s|$))"
+            r"[A-Za-z0-9._~+/=-]{12,}",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "assigned secret value",
+        re.compile(
+            r"\b(?:fiducia_api_key|cloudflare_api_token|fiducia_internal_secret)"
+            r"\s*=\s*"
+            r"(?!false\b|true\b|unset\b|none\b|not[- ]configured\b|"
+            r"\*{3}(?:\s|$)|<redacted>(?:\s|$))"
+            r"[^\s,;}'\"]{8,}",
+            re.IGNORECASE,
+        ),
+    ),
+)
 
-def fail(message: str, *, stdout: str = "", stderr: str = "") -> "NoReturn":
+
+def fail(message: str, *, stdout: str = "", stderr: str = "") -> NoReturn:
     print(f"MCP stdio smoke failed: {message}", file=sys.stderr)
     if stdout:
         print("--- stdout ---", file=sys.stderr)
@@ -53,6 +97,85 @@ def successful_response(
     if not isinstance(result, dict):
         fail(f"{method} returned a non-object result")
     return result
+
+
+def parse_protocol_stdout(stdout: str, stderr: str) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    for line_number, line in enumerate(stdout.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(
+                f"stdout line {line_number} is not JSON-RPC: {error}",
+                stdout=stdout,
+                stderr=stderr,
+            )
+        if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
+            fail(
+                f"stdout line {line_number} is not a JSON-RPC 2.0 object",
+                stdout=stdout,
+                stderr=stderr,
+            )
+        messages.append(message)
+    if not messages:
+        fail("server emitted no protocol messages", stdout=stdout, stderr=stderr)
+    return messages
+
+
+def validate_structured_stderr(stderr: str, stdout: str) -> None:
+    """Require one JSON log object per non-empty stderr line.
+
+    The normal MCP transport reserves stdout for protocol frames. Requiring
+    structured stderr catches accidental plaintext debugging while still
+    allowing the embedded repo-map documentation to appear inside a JSON field.
+    """
+
+    for line_number, line in enumerate(stderr.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(
+                f"stderr line {line_number} is not structured JSON: {error}",
+                stdout=stdout,
+                stderr=stderr,
+            )
+        if not isinstance(record, dict):
+            fail(
+                f"stderr line {line_number} is not a JSON object",
+                stdout=stdout,
+                stderr=stderr,
+            )
+        if not isinstance(record.get("level"), str) or not isinstance(
+            record.get("message"), str
+        ):
+            fail(
+                f"stderr line {line_number} lacks string level/message fields",
+                stdout=stdout,
+                stderr=stderr,
+            )
+
+
+def validate_no_sensitive_output(stdout: str, stderr: str) -> None:
+    combined = f"{stdout}\n{stderr}"
+    lowered = combined.lower()
+    crash_hits = [marker for marker in CRASH_MARKERS if marker in lowered]
+    credential_hits = [
+        label for label, pattern in CREDENTIAL_PATTERNS if pattern.search(combined)
+    ]
+    if crash_hits or credential_hits:
+        findings = [
+            *(f"crash marker: {marker}" for marker in crash_hits),
+            *(f"credential shape: {label}" for label in credential_hits),
+        ]
+        fail(
+            f"process output contains forbidden marker(s): {', '.join(findings)}",
+            stdout=stdout,
+            stderr=stderr,
+        )
 
 
 def run(image: str) -> None:
@@ -120,28 +243,9 @@ def run(image: str) -> None:
             stderr=stderr,
         )
 
-    messages: list[dict[str, Any]] = []
-    for line_number, line in enumerate(stdout.splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            message = json.loads(line)
-        except json.JSONDecodeError as error:
-            fail(
-                f"stdout line {line_number} is not JSON-RPC: {error}",
-                stdout=stdout,
-                stderr=stderr,
-            )
-        if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
-            fail(
-                f"stdout line {line_number} is not a JSON-RPC 2.0 object",
-                stdout=stdout,
-                stderr=stderr,
-            )
-        messages.append(message)
-
-    if not messages:
-        fail("server emitted no protocol messages", stdout=stdout, stderr=stderr)
+    messages = parse_protocol_stdout(stdout, stderr)
+    validate_structured_stderr(stderr, stdout)
+    validate_no_sensitive_output(stdout, stderr)
 
     response_ids = [message.get("id") for message in messages]
     if any(request_id is None for request_id in response_ids):
@@ -227,23 +331,6 @@ def run(image: str) -> None:
         )
 
     successful_response(messages, 6, "ping after protocol error")
-
-    lowered_stderr = stderr.lower()
-    forbidden_stderr = [
-        "panicked at",
-        "thread 'main' panicked",
-        "backtrace:",
-        "fiducia_api_key=",
-        "cloudflare_api_token=",
-        "authorization: bearer",
-    ]
-    leaked = [needle for needle in forbidden_stderr if needle in lowered_stderr]
-    if leaked:
-        fail(
-            f"stderr contains forbidden crash/secret markers: {', '.join(leaked)}",
-            stdout=stdout,
-            stderr=stderr,
-        )
 
     print(
         "MCP stdio lifecycle passed "

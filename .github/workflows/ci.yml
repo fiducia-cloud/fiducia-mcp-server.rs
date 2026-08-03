@@ -123,6 +123,11 @@ jobs:
               exit 1
               ;;
           esac
+      - name: Verify full MCP stdio lifecycle and safe read-only dispatch
+        working-directory: fiducia-mcp-server.rs
+        run: |
+          python3 -m py_compile scripts/smoke-mcp-stdio.py
+          python3 scripts/smoke-mcp-stdio.py "fiducia-mcp:${GITHUB_SHA}"
       - uses: taiki-e/install-action@065d6a08a14e61e89fb0a4c10eecdbdef39c7d8e # v2
         with:
           tool: cargo-audit@0.22.2

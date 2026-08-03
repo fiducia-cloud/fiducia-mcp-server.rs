@@ -24,7 +24,9 @@ RUN cargo build --release --locked --manifest-path fiducia-mcp-server.rs/Cargo.t
     && strip fiducia-mcp-server.rs/target/release/fiducia-mcp
 
 # Fetch kubectl in a disposable stage and verify the architecture-specific
-# upstream checksum before it enters the runtime image.
+# upstream checksum before it enters the runtime image. Transient transport
+# failures are retried within fixed time bounds; integrity still depends on the
+# reviewed per-architecture SHA-256 value, never on a successful download alone.
 FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS kubectl
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl
@@ -36,6 +38,15 @@ RUN case "$TARGETARCH" in \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac \
     && curl --fail --location --silent --show-error \
+      --proto '=https' \
+      --tlsv1.2 \
+      --connect-timeout 10 \
+      --max-time 120 \
+      --retry 5 \
+      --retry-all-errors \
+      --retry-connrefused \
+      --retry-delay 2 \
+      --retry-max-time 120 \
       "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
       --output /tmp/kubectl \
     && echo "$checksum  /tmp/kubectl" | sha256sum --check \

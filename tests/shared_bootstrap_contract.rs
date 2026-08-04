@@ -17,9 +17,7 @@ fn shared_bootstrap_dependency_and_lockfile_are_immutable() {
 
 #[test]
 fn canonical_stdio_identity_is_validated_before_resource_creation() {
-    assert!(TELEMETRY.contains(
-        "ore_mcp_bootstrap::runtime::ServerIdentity::stdio"
-    ));
+    assert!(TELEMETRY.contains("ore_mcp_bootstrap::runtime::ServerIdentity::stdio"));
     assert!(TELEMETRY.contains("identity.service_name()"));
     assert!(TELEMETRY.contains("identity.service_namespace()"));
     assert!(OBSERVABILITY.contains("service.name=fiducia-mcp"));
@@ -28,12 +26,8 @@ fn canonical_stdio_identity_is_validated_before_resource_creation() {
 
 #[test]
 fn production_telemetry_delegates_shared_policy_and_retains_local_caps() {
-    assert!(TELEMETRY.contains(
-        "ore_mcp_bootstrap::telemetry::MAX_RESOURCE_ATTRIBUTE_BYTES"
-    ));
-    assert!(
-        TELEMETRY.contains("ore_mcp_bootstrap::telemetry::resource_attribute_pairs")
-    );
+    assert!(TELEMETRY.contains("ore_mcp_bootstrap::telemetry::MAX_RESOURCE_ATTRIBUTE_BYTES"));
+    assert!(TELEMETRY.contains("ore_mcp_bootstrap::telemetry::resource_attribute_pairs"));
     assert!(TELEMETRY.contains("const MAX_RESOURCE_ATTRIBUTES: usize = 32"));
     assert!(TELEMETRY.contains("reserved_resource_attribute_key"));
     assert!(!TELEMETRY.contains("fn valid_attribute_key"));

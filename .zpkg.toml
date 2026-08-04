@@ -1,0 +1,31 @@
+[package]
+org = "fiducia"
+name = "fiducia-mcp-server"
+version = "0.1.0"
+description = "Global stdio MCP diagnostics for Fiducia control, data, and agent planes"
+license = "UNLICENSED"
+keywords = ["mcp", "fiducia", "coordination", "diagnostics", "global-tool"]
+language = "rust"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/fiducia-cloud/fiducia-mcp-server.rs"
+
+[build]
+command = "cargo build --release --locked --bin fiducia-mcp"
+outputs = ["target/release/fiducia-mcp"]
+
+[bin]
+fiducia-mcp = "target/release/fiducia-mcp"
+
+[publish]
+include_readme = true
+tag_format = "v{version}"
+smoke_test = "cargo test --manifest-path \"$ZED_PKG_TEST_TARGET/Cargo.toml\" --all-targets --locked && test -x \"$ZED_PKG_TEST_TARGET/target/release/fiducia-mcp\""
+exclude = [".env", ".env.*", ".direnv/**", ".zed/**", ".zed-pack/**", "target/**", "tmp/**", "**/*.log", ".DS_Store"]
+
+[install]
+adapter = "none"
+
+[scripts]
+test = "cargo test --all-targets --locked"

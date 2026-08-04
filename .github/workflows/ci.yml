@@ -25,7 +25,7 @@ jobs:
       - name: Validate GitHub Actions
         uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
         with:
-          args: fiducia-mcp-server.rs/.github/workflows/ci.yml
+          args: fiducia-mcp-server.rs/.github/workflows/ci.yml fiducia-mcp-server.rs/.github/workflows/web-smoke.yml
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -59,6 +59,9 @@ jobs:
       - name: Clippy
         working-directory: fiducia-mcp-server.rs
         run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Build (release)
+        working-directory: fiducia-mcp-server.rs
+        run: cargo build --release --locked
       - name: Test
         working-directory: fiducia-mcp-server.rs
         run: cargo test --locked --all-targets

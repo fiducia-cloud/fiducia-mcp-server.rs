@@ -1,11 +1,12 @@
 //! Explicit, stdio-safe OpenTelemetry for the MCP server.
 //!
 //! MCP owns stdout, so the fallback tracing layer always writes structured
-//! logs to stderr. OTLP traces and metrics are enabled only when
-//! `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. No runtime or library APIs are
-//! patched; tool routes are wrapped explicitly when the server is built.
+//! logs to stderr. OTLP traces and metrics are enabled only when a valid,
+//! credential-free `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. No runtime or
+//! library APIs are patched; tool routes are wrapped explicitly when the server
+//! is built.
 
-use std::{sync::Arc, time::Instant};
+use std::{collections::HashSet, sync::Arc, time::Instant};
 
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
@@ -20,6 +21,9 @@ use tracing::{field, Instrument};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 const EXPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const MAX_OTLP_ENDPOINT_BYTES: usize = 2 * 1024;
+const MAX_RESOURCE_ATTRIBUTES_RAW_BYTES: usize = 16 * 1024;
+const MAX_RESOURCE_ATTRIBUTES: usize = 32;
 
 /// Owns the SDK providers so their final batches can be flushed on shutdown.
 pub struct TelemetryGuard {
@@ -61,9 +65,7 @@ pub fn init(
     filter: EnvFilter,
 ) -> TelemetryGuard {
     let resource = resource(service_name, service_namespace);
-    let endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .ok()
-        .filter(|value| !value.trim().is_empty());
+    let endpoint = otlp_endpoint_from_env();
 
     let (tracer_provider, tracer) = endpoint
         .as_deref()
@@ -94,6 +96,38 @@ pub fn init(
         tracer_provider,
         meter_provider,
     }
+}
+
+fn otlp_endpoint_from_env() -> Option<String> {
+    let raw = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok()?;
+    sanitize_otlp_endpoint(&raw)
+}
+
+/// Accept only bounded HTTP(S) collector origins or paths without embedded
+/// credentials, query parameters, or fragments. Authentication belongs in the
+/// standard OpenTelemetry header environment variables and is never copied
+/// into spans.
+fn sanitize_otlp_endpoint(raw: &str) -> Option<String> {
+    let endpoint = raw.trim();
+    if endpoint.is_empty()
+        || endpoint.len() > MAX_OTLP_ENDPOINT_BYTES
+        || endpoint.chars().any(char::is_control)
+    {
+        return None;
+    }
+
+    let parsed = reqwest::Url::parse(endpoint).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return None;
+    }
+
+    Some(endpoint.to_string())
 }
 
 fn build_tracer_provider(
@@ -188,21 +222,36 @@ fn push_env_attribute(attributes: &mut Vec<KeyValue>, env_name: &str, key: &'sta
     }
 }
 
-fn resource_attribute_pairs(raw: &str) -> impl Iterator<Item = (String, String)> + '_ {
-    raw.split(',').filter_map(|pair| {
-        let (key, value) = pair.split_once('=')?;
+fn resource_attribute_pairs(raw: &str) -> impl Iterator<Item = (String, String)> {
+    let mut attributes = Vec::new();
+    if raw.len() > MAX_RESOURCE_ATTRIBUTES_RAW_BYTES {
+        return attributes.into_iter();
+    }
+
+    let mut seen = HashSet::new();
+    for pair in raw.split(',') {
+        if attributes.len() >= MAX_RESOURCE_ATTRIBUTES {
+            break;
+        }
+
+        let Some((key, value)) = pair.split_once('=') else {
+            continue;
+        };
         let key = key.trim();
         let value = value.trim();
         if valid_attribute_key(key)
             && valid_attribute_value(value)
             && !sensitive_attribute_key(key)
-            && !matches!(key, "service.name" | "service.namespace")
+            && !reserved_resource_attribute_key(key)
         {
-            Some((key.to_string(), value.to_string()))
-        } else {
-            None
+            let key = key.to_string();
+            if seen.insert(key.clone()) {
+                attributes.push((key, value.to_string()));
+            }
         }
-    })
+    }
+
+    attributes.into_iter()
 }
 
 fn valid_attribute_key(value: &str) -> bool {
@@ -215,6 +264,20 @@ fn valid_attribute_key(value: &str) -> bool {
 
 fn valid_attribute_value(value: &str) -> bool {
     !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control)
+}
+
+fn reserved_resource_attribute_key(key: &str) -> bool {
+    matches!(
+        key,
+        "service.name"
+            | "service.namespace"
+            | "service.version"
+            | "deployment.environment"
+            | "k8s.namespace.name"
+            | "k8s.pod.name"
+            | "k8s.node.name"
+            | "host.name"
+    )
 }
 
 fn sensitive_attribute_key(key: &str) -> bool {
@@ -310,15 +373,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resource_attributes_reject_secrets_and_identity_overrides() {
+    fn otlp_endpoint_accepts_bounded_http_collectors() {
+        assert_eq!(
+            sanitize_otlp_endpoint(" https://collector.example:4317/v1/otlp "),
+            Some("https://collector.example:4317/v1/otlp".to_string())
+        );
+        assert_eq!(
+            sanitize_otlp_endpoint("http://127.0.0.1:4317"),
+            Some("http://127.0.0.1:4317".to_string())
+        );
+    }
+
+    #[test]
+    fn otlp_endpoint_rejects_credentials_queries_fragments_and_non_http_schemes() {
+        for endpoint in [
+            "https://user:secret@collector.example:4317",
+            "https://collector.example:4317?token=secret",
+            "https://collector.example:4317#fragment",
+            "file:///tmp/otel.sock",
+            "collector.example:4317",
+        ] {
+            assert_eq!(sanitize_otlp_endpoint(endpoint), None, "{endpoint}");
+        }
+        assert_eq!(
+            sanitize_otlp_endpoint(&format!(
+                "https://collector.example/{}",
+                "x".repeat(MAX_OTLP_ENDPOINT_BYTES)
+            )),
+            None
+        );
+    }
+
+    #[test]
+    fn resource_attributes_reject_secrets_and_owned_identity_fields() {
         let attributes = resource_attribute_pairs(
-            "team=simulation,api.token=nope,service.name=spoof,cloud.region=us-east-1",
+            "team=coordination,api.token=nope,service.name=spoof,service.version=spoof,deployment.environment=spoof,cloud.region=us-east-1",
         )
         .collect::<Vec<_>>();
         assert_eq!(
             attributes,
             vec![
-                ("team".to_string(), "simulation".to_string()),
+                ("team".to_string(), "coordination".to_string()),
                 ("cloud.region".to_string(), "us-east-1".to_string()),
             ]
         );
@@ -332,5 +427,25 @@ mod tests {
             resource_attribute_pairs(&raw).collect::<Vec<_>>(),
             vec![("good".to_string(), "value".to_string())]
         );
+    }
+
+    #[test]
+    fn resource_attributes_are_bounded_and_first_value_wins() {
+        let mut pairs = vec!["team=first".to_string(), "team=second".to_string()];
+        pairs.extend((0..40).map(|index| format!("custom.key{index}=value")));
+        let attributes = resource_attribute_pairs(&pairs.join(",")).collect::<Vec<_>>();
+
+        assert_eq!(attributes.len(), MAX_RESOURCE_ATTRIBUTES);
+        assert_eq!(attributes[0], ("team".to_string(), "first".to_string()));
+        assert!(!attributes.iter().any(|(_, value)| value == "second"));
+    }
+
+    #[test]
+    fn oversized_resource_attribute_environment_is_ignored() {
+        let raw = format!(
+            "custom.key={}",
+            "x".repeat(MAX_RESOURCE_ATTRIBUTES_RAW_BYTES)
+        );
+        assert!(resource_attribute_pairs(&raw).next().is_none());
     }
 }

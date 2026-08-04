@@ -6,7 +6,7 @@
 
 use std::error::Error;
 
-use rmcp::{ServiceExt, transport::stdio};
+use rmcp::{transport::stdio, ServiceExt};
 use tracing::Instrument;
 
 use crate::{

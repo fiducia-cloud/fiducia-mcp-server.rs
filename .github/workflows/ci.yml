@@ -65,6 +65,41 @@ jobs:
       - name: Test
         working-directory: fiducia-mcp-server.rs
         run: cargo test --locked --all-targets
+      - name: Documentation
+        working-directory: fiducia-mcp-server.rs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --no-deps
+      - name: Enforce runtime and telemetry boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=fiducia-mcp-server.rs
+          test -f "$root/OBSERVABILITY.md"
+          test -f "$root/src/runtime.rs"
+          test -f "$root/tests/runtime_architecture.rs"
+          if [ "$(wc -l < "$root/src/main.rs")" -gt 8 ]; then
+            echo 'src/main.rs must remain a thin binary bootstrap' >&2
+            exit 1
+          fi
+          git -C "$root" grep -qF 'pub async fn run_stdio' -- src/runtime.rs
+          git -C "$root" grep -qF 'process_log_filter' -- src/runtime.rs
+          git -C "$root" grep -qF 'MAX_OTLP_ENDPOINT_BYTES' -- src/telemetry.rs
+          git -C "$root" grep -qF 'MAX_RESOURCE_ATTRIBUTES_RAW_BYTES' -- src/telemetry.rs
+          git -C "$root" grep -qF 'MAX_RESOURCE_ATTRIBUTES' -- src/telemetry.rs
+          git -C "$root" grep -qF 'sanitize_otlp_endpoint' -- src/telemetry.rs
+          git -C "$root" grep -qF '.with_writer(std::io::stderr)' -- src/telemetry.rs
+          git -C "$root" grep -qF 'mcp.server.tool.calls' -- src/telemetry.rs
+          git -C "$root" grep -qF 'mcp.server.tool.duration' -- src/telemetry.rs
+          if git -C "$root" grep -nE 'serve\(|telemetry::init|process_log_filter|Config::from_env' -- src/main.rs; then
+            echo 'runtime lifecycle must not regress into src/main.rs' >&2
+            exit 1
+          fi
+          if git -C "$root" grep -nE '(^|[^[:alnum:]_])print(ln)?!' -- src/main.rs src/runtime.rs src/telemetry.rs; then
+            echo 'stdout writes are forbidden in the MCP runtime and telemetry modules' >&2
+            exit 1
+          fi
+          git -C "$root" diff --check
       - name: Build non-root tool-runner image
         working-directory: fiducia-mcp-server.rs
         run: docker build --tag "fiducia-mcp:${GITHUB_SHA}" .

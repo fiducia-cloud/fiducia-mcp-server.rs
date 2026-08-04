@@ -1,0 +1,60 @@
+name: DEN-957 one-shot bootstrap finalizer
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/den-957-bootstrap-finalize.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-957-fiducia-bootstrap-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/den-957-adopt-bootstrap-a5c1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out exact adoption branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/den-957-adopt-bootstrap-a5c1
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Install validation toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.97.1
+          components: rustfmt,clippy
+
+      - name: Regenerate lockfile and validate product contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked --all-targets
+          RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps
+          cargo build --locked --release
+          grep -F 'rev = "a5c1ba9c50493ac625dd2fb175af21263d0d2801"' Cargo.toml
+          grep -F 'a5c1ba9c50493ac625dd2fb175af21263d0d2801' Cargo.lock
+          git diff --check
+
+      - name: Remove helper, commit, and push permanent review head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/den-957-bootstrap-finalize.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(DEN-957): adopt shared MCP bootstrap identity'
+          git push origin HEAD:agent/den-957-adopt-bootstrap-a5c1

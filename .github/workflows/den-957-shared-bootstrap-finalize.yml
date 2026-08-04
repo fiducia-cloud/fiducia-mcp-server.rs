@@ -120,6 +120,8 @@ jobs:
           cargo generate-lockfile
           cargo fmt --all
           cargo fmt --all -- --check
+          echo 'Transformed telemetry context around the Clippy diagnostic:'
+          nl -ba src/telemetry.rs | sed -n '360,405p'
           cargo clippy --locked --all-targets -- -D warnings
           cargo build --release --locked
           cargo test --locked --all-targets

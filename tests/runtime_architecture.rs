@@ -37,8 +37,8 @@ fn runtime_is_exported_and_does_not_absorb_tool_implementations() {
     assert!(LIB_RS.contains("pub mod runtime;"));
     assert!(!RUNTIME_RS.contains("#[tool"));
     assert!(!RUNTIME_RS.contains("serde_json::json"));
-    assert!(!RUNTIME_RS.contains("FIDUCIA_API_KEY=") );
-    assert!(!RUNTIME_RS.contains("FIDUCIA_INTERNAL_SECRET=") );
+    assert!(!RUNTIME_RS.contains("FIDUCIA_API_KEY="));
+    assert!(!RUNTIME_RS.contains("FIDUCIA_INTERNAL_SECRET="));
 }
 
 #[test]

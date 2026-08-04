@@ -24,6 +24,7 @@ flags2env = { git = "https://github.com/ORESoftware/flags-2-env.git", rev = "377
 opentelemetry = "0.27"
 opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "metrics", "trace"] }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+ore-mcp-bootstrap = { git = "https://github.com/ORESoftware/mcp-rust-libs.git", rev = "a5c1ba9c50493ac625dd2fb175af21263d0d2801" }
 tracing = "0.1"
 # Logs MUST go to stderr: stdout is the MCP wire. This crate uses its explicit
 # stdio-safe telemetry module instead of the stdout-oriented shared fallback.

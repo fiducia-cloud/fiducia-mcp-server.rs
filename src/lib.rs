@@ -8,5 +8,6 @@ pub mod flags;
 pub mod k8s;
 pub mod repo_map;
 pub mod server;
+pub mod shared_bootstrap;
 pub mod telemetry;
 pub mod upstream;

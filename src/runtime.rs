@@ -31,7 +31,7 @@ pub async fn run_stdio() -> Result<(), Box<dyn Error>> {
         org_id_configured = config.org_id.is_some(),
         api_key_configured = config.api_key.is_some(),
         transport = "stdio",
-        "starting Fiducia MCP server"
+        "starting fiducia-mcp"
     );
 
     let server_span = tracing::info_span!("mcp.server", rpc.system = "mcp", transport = "stdio");

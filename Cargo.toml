@@ -21,6 +21,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "sig
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 flags2env = { git = "https://github.com/ORESoftware/flags-2-env.git", rev = "377bff1a4e7424eb98377997a232ddc0fc700f59" }
+ore-mcp-bootstrap = { git = "https://github.com/ORESoftware/mcp-rust-libs", rev = "a5c1ba9c50493ac625dd2fb175af21263d0d2801" }
 opentelemetry = "0.27"
 opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "metrics", "trace"] }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }

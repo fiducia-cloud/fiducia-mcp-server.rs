@@ -38,7 +38,7 @@ The process owns these resource attributes and does not permit `OTEL_RESOURCE_AT
 
 Additional `OTEL_RESOURCE_ATTRIBUTES` use a bounded contract:
 
-- at most 16 KiB raw input;
+- at most 8 KiB raw input, enforced by the immutable shared bootstrap policy;
 - at most 32 accepted attributes;
 - keys are 1–128 ASCII alphanumeric, `.`, `_`, or `-` characters;
 - values are 1–256 characters and contain no control characters;

@@ -22,7 +22,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 const EXPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const MAX_OTLP_ENDPOINT_BYTES: usize = 2 * 1024;
-const MAX_RESOURCE_ATTRIBUTES_RAW_BYTES: usize = 16 * 1024;
+const MAX_RESOURCE_ATTRIBUTES_RAW_BYTES: usize =
+    ore_mcp_bootstrap::telemetry::MAX_RESOURCE_ATTRIBUTE_BYTES;
 const MAX_RESOURCE_ATTRIBUTES: usize = 32;
 
 /// Owns the SDK providers so their final batches can be flushed on shutdown.
@@ -64,6 +65,11 @@ pub fn init(
     service_namespace: &'static str,
     filter: EnvFilter,
 ) -> TelemetryGuard {
+    let identity =
+        ore_mcp_bootstrap::runtime::ServerIdentity::stdio(service_name, service_namespace)
+            .expect("static MCP service identity must be valid");
+    let service_name = identity.service_name();
+    let service_namespace = identity.service_namespace();
     let resource = resource(service_name, service_namespace);
     let endpoint = otlp_endpoint_from_env();
 
@@ -229,37 +235,16 @@ fn resource_attribute_pairs(raw: &str) -> impl Iterator<Item = (String, String)>
     }
 
     let mut seen = HashSet::new();
-    for pair in raw.split(',') {
+    for (key, value) in ore_mcp_bootstrap::telemetry::resource_attribute_pairs(raw) {
         if attributes.len() >= MAX_RESOURCE_ATTRIBUTES {
             break;
         }
-
-        let Some((key, value)) = pair.split_once('=') else {
-            continue;
-        };
-        let key = key.trim();
-        let value = value.trim();
-        if valid_attribute_key(key)
-            && valid_attribute_value(value)
-            && !sensitive_attribute_key(key)
-            && !reserved_resource_attribute_key(key)
-        {
-            let key = key.to_string();
-            if seen.insert(key.clone()) {
-                attributes.push((key, value.to_string()));
-            }
+        if !reserved_resource_attribute_key(&key) && seen.insert(key.clone()) {
+            attributes.push((key, value));
         }
     }
 
     attributes.into_iter()
-}
-
-fn valid_attribute_key(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 fn valid_attribute_value(value: &str) -> bool {
@@ -278,31 +263,6 @@ fn reserved_resource_attribute_key(key: &str) -> bool {
             | "k8s.node.name"
             | "host.name"
     )
-}
-
-fn sensitive_attribute_key(key: &str) -> bool {
-    let normalized = key.to_ascii_lowercase().replace(['-', '.'], "_");
-    [
-        "authorization",
-        "bearer",
-        "cookie",
-        "credential",
-        "email",
-        "jwt",
-        "passphrase",
-        "passwd",
-        "password",
-        "private_key",
-        "pwd",
-        "secret",
-        "session",
-        "signing_key",
-        "token",
-        "api_key",
-        "apikey",
-    ]
-    .iter()
-    .any(|needle| normalized.contains(needle))
 }
 
 /// Add one explicit span and two low-cardinality metrics around every tool.

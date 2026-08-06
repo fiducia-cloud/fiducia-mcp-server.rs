@@ -28,11 +28,11 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
-      - name: Install Playwright (pinned)
+      - name: Install Playwright (locked)
         working-directory: web-smoke
         run: |
           set -euo pipefail
-          npm i -D @playwright/test@1.62.1
+          npm ci
           npx playwright install --with-deps chromium
       - name: Run browser smoke
         working-directory: web-smoke

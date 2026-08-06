@@ -14,3 +14,7 @@ tmp/
 .env
 .env.*
 !.env.example
+tmp
+temp
+tmp/worktrees
+temp/worktrees

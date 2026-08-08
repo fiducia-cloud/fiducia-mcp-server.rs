@@ -500,9 +500,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.19.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "476de73bddf2ef8490aa4ee8f1cf40b430bf1d56c48c22080e5186952cd580e6"
+checksum = "e1e1dacd0d2082dfcf1351c4bdd566bbe89a2b263235a2b50058f1e130a47277"
 dependencies = [
  "bit-set",
  "regex-automata",
@@ -522,7 +522,7 @@ dependencies = [
 [[package]]
 name = "fiducia-interfaces"
 version = "0.1.0"
-source = "git+https://github.com/fiducia-cloud/fiducia-interfaces.git?rev=ee8fe09f846f5a776d156c0b0d0d15582c8bd539#ee8fe09f846f5a776d156c0b0d0d15582c8bd539"
+source = "git+https://github.com/fiducia-cloud/fiducia-interfaces.git?rev=2c5c806174e067fbe83ad48b724366323ba390a2#2c5c806174e067fbe83ad48b724366323ba390a2"
 dependencies = [
  "jsonschema",
  "serde",
@@ -1237,9 +1237,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.49.6"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e17384278234b10419a63c93fc85695ac9fc2da0833e3c59167f9986499590c"
+checksum = "f05a6cff806294a7699d48761d4ae2bdebab7fa2eef05e4a0b83320f0ff46901"
 dependencies = [
  "ahash",
  "bytecount",
@@ -1266,18 +1266,18 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.49.6"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac634e339e73bf9629f6fb207f7b064d872253ae3b3f5c6e0ce8fd762b16e40f"
+checksum = "84708dd3f6c5327478a96f37378adb27deed6a626cf84d19de780d9e8ae84b17"
 dependencies = [
  "regex-syntax",
 ]
 
 [[package]]
 name = "jsonschema-value"
-version = "0.49.6"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92b8e258eb4515a3fc912a9c46e3987040dc07280592280097ea2085527870b8"
+checksum = "fd8c04ab4ce60e42c4e302d3bd9d184652bb56f212495d2eea23573bcbf72556"
 dependencies = [
  "ahash",
  "bytecount",
@@ -1911,9 +1911,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.49.6"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42902112f88a27e9afd5683e2ba31956fed2a5d43395f166dd26775ae9c0dedb"
+checksum = "980e77f5cfffc592c0e7dfb6d20770a0b96a6ab94d403de7454ed9799505e4ba"
 dependencies = [
  "ahash",
  "fluent-uri",

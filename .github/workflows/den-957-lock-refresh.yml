@@ -6,8 +6,10 @@ on:
       - agent/DEN-957-dedupe-bootstrap-dependency
   workflow_dispatch:
 
+# Temporary branch-scoped permission. This workflow is deleted after the exact
+# generated Cargo.lock is committed to the PR branch.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: den-957-lock-refresh-${{ github.ref }}
@@ -15,13 +17,14 @@ concurrency:
 
 jobs:
   refresh:
-    if: github.repository == 'fiducia-cloud/fiducia-mcp-server.rs'
+    if: github.repository == 'fiducia-cloud/fiducia-mcp-server.rs' && github.ref == 'refs/heads/agent/DEN-957-dedupe-bootstrap-dependency'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
+          ref: agent/DEN-957-dedupe-bootstrap-dependency
+          persist-credentials: true
           path: fiducia-mcp-server.rs
           submodules: false
 
@@ -47,20 +50,18 @@ jobs:
           git diff --check -- Cargo.lock
           test -s Cargo.lock
 
-      - name: Record metadata-only lock evidence
+      - name: Commit only Cargo.lock to the reviewed branch
         working-directory: fiducia-mcp-server.rs
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "${RUNNER_TEMP}/den-957-lock-refresh"
-          cp Cargo.lock "${RUNNER_TEMP}/den-957-lock-refresh/Cargo.lock"
-          sha256sum Cargo.lock > "${RUNNER_TEMP}/den-957-lock-refresh/Cargo.lock.sha256"
-          git diff --numstat -- Cargo.lock > "${RUNNER_TEMP}/den-957-lock-refresh/Cargo.lock.numstat"
-
-      - name: Upload regenerated lockfile
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: den-957-lock-refresh-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/den-957-lock-refresh
-          if-no-files-found: error
-          retention-days: 3
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Cargo.lock is already current"
+            exit 0
+          fi
+          test "$(git diff --cached --name-only)" = "Cargo.lock"
+          git commit -m "build(DEN-957): refresh shared bootstrap lock source"
+          git push origin HEAD:agent/DEN-957-dedupe-bootstrap-dependency

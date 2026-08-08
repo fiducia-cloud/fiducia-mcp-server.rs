@@ -1,0 +1,66 @@
+name: DEN-957 lock refresh
+
+on:
+  push:
+    branches:
+      - agent/DEN-957-dedupe-bootstrap-dependency
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: den-957-lock-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.repository == 'fiducia-cloud/fiducia-mcp-server.rs'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: fiducia-mcp-server.rs
+          submodules: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: fiducia-cloud/fiducia-clients
+          ref: 5cd1a537f7ab98808ece4cdd09723be0bf49ce8b
+          path: fiducia-clients
+          submodules: false
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+
+      - name: Refresh only the affected locked Git source
+        working-directory: fiducia-mcp-server.rs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo update -p ore-mcp-bootstrap --precise a5c1ba9c50493ac625dd2fb175af21263d0d2801
+          cargo metadata --locked --format-version 1 --no-deps >/dev/null
+          git diff --check -- Cargo.lock
+          test -s Cargo.lock
+
+      - name: Record metadata-only lock evidence
+        working-directory: fiducia-mcp-server.rs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/den-957-lock-refresh"
+          cp Cargo.lock "${RUNNER_TEMP}/den-957-lock-refresh/Cargo.lock"
+          sha256sum Cargo.lock > "${RUNNER_TEMP}/den-957-lock-refresh/Cargo.lock.sha256"
+          git diff --numstat -- Cargo.lock > "${RUNNER_TEMP}/den-957-lock-refresh/Cargo.lock.numstat"
+
+      - name: Upload regenerated lockfile
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: den-957-lock-refresh-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/den-957-lock-refresh
+          if-no-files-found: error
+          retention-days: 3

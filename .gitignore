@@ -11,9 +11,23 @@ target/
 *.log
 *.swp
 tmp/
+# --- environment / secrets (sops + age) -------------------------------------
+# Only env/enc/*.env.enc is tracked. Every plaintext form stays out of git;
+# `just env-check` enforces it. See env/README.md.
+# (`*.env` already matches at any depth — `**/*.env` is stated for clarity.)
 .env
 .env.*
+*.env
+**/*.env
+env/dec/
 !.env.example
+
+# age private keys — never commit these.
+*.agekey
+*.age-key
+keys.txt
+sops-private*.txt
+
 
 # direnv-generated Nix dev-shell cache
 .direnv/

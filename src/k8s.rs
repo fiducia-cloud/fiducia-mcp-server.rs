@@ -8,6 +8,9 @@
 //!   status --watch=false`, `top`) are ever invoked.
 //! - every `--context` is validated against `kubectl config get-contexts -o name`
 //!   before use, and optionally restricted further by `FIDUCIA_K8S_CONTEXTS`.
+//! - user-supplied resource names (namespace, service, rollout) are DNS-1123
+//!   labels: never flag-shaped, never `--server=…` injection into argv.
+//! - positional names are passed after `--` so kubectl cannot treat them as flags.
 //! - every call is wrapped in a 15s timeout.
 //! - large summaries are truncated to ~32KB with a note.
 
@@ -108,11 +111,37 @@ async fn available_contexts() -> Result<Vec<String>, String> {
         .collect())
 }
 
+/// DNS-1123 label: 1–63 lowercase alphanumerics and `-`, starting and ending
+/// on an alphanumeric. Rejects flag-shaped values (`--server=…`) before they
+/// can be spliced into a kubectl argv.
+pub fn validate_k8s_dns_label(name: &str, what: &str) -> Result<String, String> {
+    let name = name.trim();
+    let ok = (1..=63).contains(&name.len())
+        && !name.starts_with('-')
+        && !name.ends_with('-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+    if !ok {
+        return Err(format!(
+            "invalid {what} {name:?}: must be a DNS-1123 label (lowercase alphanumeric / '-', not flag-shaped)"
+        ));
+    }
+    Ok(name.to_string())
+}
+
 /// Reject a context that is unknown to kubectl or excluded by the allowlist.
 async fn validate_context(context: &str) -> Result<String, String> {
     let context = context.trim();
     if context.is_empty() {
         return Err("`context` is required".to_string());
+    }
+    if context.starts_with('-') || context.contains('\0') {
+        return Err(format!("invalid kubectl context {context:?}"));
     }
     if let Some(allow) = context_allowlist() {
         if !allow.iter().any(|a| a == context) {
@@ -186,7 +215,7 @@ pub async fn contexts() -> Result<Value, String> {
 /// pod list (phase/restarts/node/created) in a namespace.
 pub async fn workloads(context: &str, namespace: &str) -> Result<Value, String> {
     let context = validate_context(context).await?;
-    let namespace = namespace_or_default(namespace);
+    let namespace = validate_k8s_dns_label(&namespace_or_default(namespace), "namespace")?;
     let base = scoped(&context, &namespace);
 
     let mut workload_args = base.clone();
@@ -224,17 +253,15 @@ pub async fn rollout_status(
             "`kind` must be \"deployment\" or \"statefulset\", got {kind:?}"
         ));
     }
-    let name = name.trim();
-    if name.is_empty() {
-        return Err("`name` is required".to_string());
-    }
-    let namespace = namespace_or_default(namespace);
+    let name = validate_k8s_dns_label(name, "workload name")?;
+    let namespace = validate_k8s_dns_label(&namespace_or_default(namespace), "namespace")?;
     let mut args = scoped(&context, &namespace);
     args.extend([
         "rollout".into(),
         "status".into(),
-        format!("{kind}/{name}"),
         "--watch=false".into(),
+        "--".into(),
+        format!("{kind}/{name}"),
     ]);
     let out = run_kubectl(&args).await?;
     let message = if out.stdout.trim().is_empty() {
@@ -255,7 +282,7 @@ pub async fn rollout_status(
 /// `k8s_events`: the most recent `last` events by lastTimestamp (newest first).
 pub async fn events(context: &str, namespace: &str, last: usize) -> Result<Value, String> {
     let context = validate_context(context).await?;
-    let namespace = namespace_or_default(namespace);
+    let namespace = validate_k8s_dns_label(&namespace_or_default(namespace), "namespace")?;
     let last = if last == 0 { 30 } else { last };
     let mut args = scoped(&context, &namespace);
     args.extend(["get".into(), "events".into(), "-o".into(), "json".into()]);
@@ -290,18 +317,16 @@ pub async fn service_endpoints(
     service: &str,
 ) -> Result<Value, String> {
     let context = validate_context(context).await?;
-    let service = service.trim();
-    if service.is_empty() {
-        return Err("`service` is required".to_string());
-    }
-    let namespace = namespace_or_default(namespace);
+    let service = validate_k8s_dns_label(service, "service")?;
+    let namespace = validate_k8s_dns_label(&namespace_or_default(namespace), "namespace")?;
     let mut args = scoped(&context, &namespace);
     args.extend([
         "get".into(),
         "endpoints".into(),
-        service.into(),
         "-o".into(),
         "json".into(),
+        "--".into(),
+        service.clone(),
     ]);
     let json_out = run_json(&args).await?;
 
@@ -619,6 +644,42 @@ fi
 sleep 5
 echo '{"items":[]}'
 "#;
+
+    #[test]
+    fn dns_label_rejects_flag_injection() {
+        assert_eq!(
+            validate_k8s_dns_label("fiducia-node", "service").unwrap(),
+            "fiducia-node"
+        );
+        assert_eq!(validate_k8s_dns_label("a", "service").unwrap(), "a");
+        for bad in [
+            "",
+            "--server=http://attacker",
+            "-n",
+            "kube_system",
+            "UPPER",
+            "has space",
+            "ends-",
+            "-starts",
+            "a/b",
+            "a;b",
+            &"x".repeat(64),
+        ] {
+            assert!(
+                validate_k8s_dns_label(bad, "service").is_err(),
+                "should reject {bad:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn service_endpoints_rejects_flag_shaped_service_before_kubectl() {
+        let err = service_endpoints("gke_fiducia_prod", "fiducia", "--server=http://attacker")
+            .await
+            .unwrap_err();
+        assert!(err.contains("DNS-1123"), "{err}");
+        assert!(err.contains("service"), "{err}");
+    }
 
     #[tokio::test]
     async fn kubectl_call_times_out() {

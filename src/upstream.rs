@@ -53,19 +53,27 @@ pub(crate) fn env_nonempty(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|v| !v.trim().is_empty())
 }
 
+fn env_nonempty_from_map(env: &crate::env_map::EnvMap, key: &str) -> Option<String> {
+    crate::env_map::env_value(env, key).map(str::to_owned)
+}
+
 impl Config {
     pub fn from_env() -> Self {
+        Self::from_env_map(&crate::env_map::process_env_map())
+    }
+
+    pub fn from_env_map(env: &crate::env_map::EnvMap) -> Self {
         Self {
-            node_url: env_nonempty(NODE_URL_ENV).unwrap_or_else(|| DEFAULT_NODE_URL.into()),
-            brain_url: env_nonempty(BRAIN_URL_ENV).unwrap_or_else(|| DEFAULT_BRAIN_URL.into()),
-            agent_cp_url: env_nonempty(AGENT_CP_URL_ENV),
-            internal_secret: env_nonempty(INTERNAL_SECRET_ENV),
-            org_id: env_nonempty(ORG_ID_ENV),
-            // The agent control plane checks FIDUCIA_CONTROL_PLANE_SECRET and
-            // falls back to FIDUCIA_INTERNAL_SECRET; mirror that here.
-            control_plane_secret: env_nonempty(CONTROL_PLANE_SECRET_ENV)
-                .or_else(|| env_nonempty(INTERNAL_SECRET_ENV)),
-            api_key: env_nonempty(API_KEY_ENV),
+            node_url: env_nonempty_from_map(env, NODE_URL_ENV)
+                .unwrap_or_else(|| DEFAULT_NODE_URL.into()),
+            brain_url: env_nonempty_from_map(env, BRAIN_URL_ENV)
+                .unwrap_or_else(|| DEFAULT_BRAIN_URL.into()),
+            agent_cp_url: env_nonempty_from_map(env, AGENT_CP_URL_ENV),
+            internal_secret: env_nonempty_from_map(env, INTERNAL_SECRET_ENV),
+            org_id: env_nonempty_from_map(env, ORG_ID_ENV),
+            control_plane_secret: env_nonempty_from_map(env, CONTROL_PLANE_SECRET_ENV)
+                .or_else(|| env_nonempty_from_map(env, INTERNAL_SECRET_ENV)),
+            api_key: env_nonempty_from_map(env, API_KEY_ENV),
         }
     }
 

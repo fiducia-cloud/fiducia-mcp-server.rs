@@ -19,13 +19,13 @@ use crate::{
 /// stdout is exclusively owned by MCP JSON-RPC framing. Runtime diagnostics
 /// flow through the structured stderr subscriber installed by telemetry.
 pub async fn run_stdio() -> Result<(), Box<dyn Error>> {
-    let log_filter = crate::flags::process_log_filter()?;
-    let _telemetry = crate::telemetry::init("fiducia-mcp", "fiducia-cloud", log_filter);
+    let env = crate::flags::apply_cli_flags()?;
+    let _telemetry = crate::telemetry::init("fiducia-mcp", "fiducia-cloud", &env);
 
-    let config = Config::from_env();
+    let config = Config::from_env_map(&env);
     tracing::info!(
-        node_url_configured = std::env::var_os("FIDUCIA_NODE_URL").is_some(),
-        brain_url_configured = std::env::var_os("FIDUCIA_BRAIN_URL").is_some(),
+        node_url_configured = crate::env_map::env_value(&env, "FIDUCIA_NODE_URL").is_some(),
+        brain_url_configured = crate::env_map::env_value(&env, "FIDUCIA_BRAIN_URL").is_some(),
         agent_cp_url_configured = config.agent_cp_url.is_some(),
         internal_secret_configured = config.internal_secret.is_some(),
         org_id_configured = config.org_id.is_some(),

@@ -4,6 +4,7 @@
 
 pub mod cloudflare;
 pub mod domains;
+pub mod env_map;
 pub mod flags;
 pub mod k8s;
 pub mod repo_map;
@@ -12,3 +13,5 @@ pub mod server;
 pub mod shared_bootstrap;
 pub mod telemetry;
 pub mod upstream;
+
+pub use env_map::{env_value, get_env_map, EnvMap};

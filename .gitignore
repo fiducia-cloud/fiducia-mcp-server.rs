@@ -40,3 +40,6 @@ temp/worktrees
 # only env/enc/*.env.enc (sops ciphertext) is tracked. See env/README.md.
 **/**/*.env
 env/dec
+
+# machine-local symlink to ORESoftware/my-ai AGENTS.md; never committed
+.ores/

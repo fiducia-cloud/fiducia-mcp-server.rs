@@ -13,9 +13,9 @@ fn main_remains_a_thin_bootstrap_and_runtime_owns_stdio() {
     assert!(MAIN_RS.contains("fiducia_mcp_server::runtime::run_stdio"));
 
     for lifecycle_detail in [
-        "process_log_filter",
+        "apply_cli_flags",
         "telemetry::init",
-        "Config::from_env",
+        "Config::from_env_map",
         "FiduciaMcp",
         "Upstream",
         "serve(stdio())",

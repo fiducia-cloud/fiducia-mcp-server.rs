@@ -83,7 +83,7 @@ jobs:
             exit 1
           fi
           git -C "$root" grep -qF 'pub async fn run_stdio' -- src/runtime.rs
-          git -C "$root" grep -qF 'process_log_filter' -- src/runtime.rs
+          git -C "$root" grep -qF 'apply_cli_flags' -- src/runtime.rs
           git -C "$root" grep -qF 'MAX_OTLP_ENDPOINT_BYTES' -- src/telemetry.rs
           git -C "$root" grep -qF 'MAX_RESOURCE_ATTRIBUTES_RAW_BYTES' -- src/telemetry.rs
           git -C "$root" grep -qF 'MAX_RESOURCE_ATTRIBUTES' -- src/telemetry.rs
@@ -91,7 +91,7 @@ jobs:
           git -C "$root" grep -qF '.with_writer(std::io::stderr)' -- src/telemetry.rs
           git -C "$root" grep -qF 'mcp.server.tool.calls' -- src/telemetry.rs
           git -C "$root" grep -qF 'mcp.server.tool.duration' -- src/telemetry.rs
-          if git -C "$root" grep -nE 'serve\(|telemetry::init|process_log_filter|Config::from_env' -- src/main.rs; then
+          if git -C "$root" grep -nE 'serve\(|telemetry::init|apply_cli_flags|Config::from_env' -- src/main.rs; then
             echo 'runtime lifecycle must not regress into src/main.rs' >&2
             exit 1
           fi

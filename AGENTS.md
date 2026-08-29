@@ -1,3 +1,31 @@
+# fiducia-mcp-server.rs — agent contract
+
+## Parent / root agent contract
+
+This file is **this repository's** agent contract. The fleet-wide parent lives at:
+
+- GitHub: https://github.com/oresoftware/my-ai/AGENTS.md
+- Disk: `~/codes/oresoftware/my-ai/AGENTS.md`
+- Installed by `~/codes/oresoftware/my-ai/setup-final.sh` (not `.md`) as symlinks onto:
+  - `~/codes/AGENTS.md`
+  - `~/codes/.claude/AGENTS.md` and `~/codes/.claude/CLAUDE.md`
+  - `~/codes/.cursor/AGENTS.md` and `~/codes/.cursor/.cursorrules`
+  - `~/codes/.chatgpt/AGENTS.md`
+  - `~/codes/.openai/AGENTS.md`
+  - `~/codes/.anthropic/AGENTS.md`
+
+When this file and the parent disagree: follow **this file** for this MCP
+server's tools, safety boundary, and env layout; follow the parent for org-wide
+git/Linear/GitHub/k8s/shared-auth/opto-sync/ores-otel/zed-pkg conventions.
+
+The mapping is 1:1:1:1 — GitHub org : Linear project : GitHub org project
+(usually `https://github.com/orgs/<org>/projects/1`) : Slack channel in
+`oresoftware-workspace.slack.com`. Linear workspace: https://linear.app/denman
+Primary GitHub user: `ORESoftware`. Secondary: `the1mills`.
+
+
+---
+
 # Agent guidelines — fiducia-mcp-server.rs
 
 MCP server exposing read-only fiducia.cloud diagnostics over stdio. See

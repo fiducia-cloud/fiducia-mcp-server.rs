@@ -316,9 +316,9 @@ pub async fn service_endpoints(
     namespace: &str,
     service: &str,
 ) -> Result<Value, String> {
-    let context = validate_context(context).await?;
     let service = validate_k8s_dns_label(service, "service")?;
     let namespace = validate_k8s_dns_label(&namespace_or_default(namespace), "namespace")?;
+    let context = validate_context(context).await?;
     let mut args = scoped(&context, &namespace);
     args.extend([
         "get".into(),

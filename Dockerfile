@@ -27,7 +27,7 @@ RUN cargo build --release --locked --manifest-path fiducia-mcp-server.rs/Cargo.t
 # upstream checksum before it enters the runtime image. Transient transport
 # failures are retried within fixed time bounds; integrity still depends on the
 # reviewed per-architecture SHA-256 value, never on a successful download alone.
-FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241 AS kubectl
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS kubectl
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl
 ARG TARGETARCH
@@ -54,7 +54,7 @@ RUN case "$TARGETARCH" in \
 
 # The MCP server shells out to kubectl for its read-only Kubernetes tools, so
 # this is an explicit non-root tool-runner rather than a distroless service.
-FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
 LABEL org.fiducia.runtime-profile="tool-runner-nonroot"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \

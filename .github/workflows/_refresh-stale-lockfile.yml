@@ -21,6 +21,8 @@ jobs:
         with:
           path: fiducia-mcp-server.rs
           fetch-depth: 0
+          # This one-shot job removes itself and pushes only after all checks pass.
+          persist-credentials: true
 
       - name: Check out the CI-pinned sibling client
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,6 +37,27 @@ jobs:
         with:
           toolchain: 1.97.0
           components: rustfmt, clippy
+
+      - name: Restore fail-early Kubernetes input validation
+        working-directory: fiducia-mcp-server.rs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("src/k8s.rs")
+          before = path.read_text(encoding="utf-8")
+          old = '''    let context = validate_context(context).await?;
+              let service = validate_k8s_dns_label(service, "service")?;
+              let namespace = validate_k8s_dns_label(&namespace_or_default(namespace), "namespace")?;'''.replace("              ", "    ")
+          new = '''    let service = validate_k8s_dns_label(service, "service")?;
+              let namespace = validate_k8s_dns_label(&namespace_or_default(namespace), "namespace")?;
+              let context = validate_context(context).await?;'''.replace("              ", "    ")
+          if before.count(old) != 1:
+              raise SystemExit("expected exactly one service_endpoints validation block")
+          path.write_text(before.replace(old, new), encoding="utf-8")
+          PY
 
       - name: Refresh only what Cargo requires and verify the locked build
         working-directory: fiducia-mcp-server.rs
@@ -53,15 +76,15 @@ jobs:
           cargo test --locked --all-targets
           git diff --check
 
-      - name: Commit the tested lock repair and remove this workflow
+      - name: Commit the tested repair and remove this workflow
         working-directory: fiducia-mcp-server.rs
         shell: bash
         run: |
           set -euo pipefail
           git rm -- .github/workflows/_refresh-stale-lockfile.yml
-          git add Cargo.lock
+          git add Cargo.lock src/k8s.rs
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(build): refresh stale Cargo lockfile'
+          git commit -m 'fix(build): refresh lockfile and fail early on k8s input'
           git push origin "HEAD:${GITHUB_REF_NAME}"

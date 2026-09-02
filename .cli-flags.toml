@@ -1,6 +1,6 @@
 # MCP stdout is reserved for JSON-RPC. Only non-secret logging configuration is
-# accepted as a process flag; all upstream topology and authentication remain
-# environment-only.
+# accepted as a process flag; all upstream topology, collector endpoints,
+# configuration-file selection, and authentication remain environment-only.
 
 [help]
 url = "https://github.com/fiducia-cloud/fiducia-mcp-server.rs#configuration"
@@ -10,7 +10,7 @@ columns = ["options", "env", "type", "default", "description"]
 allow_unknown = false
 
 [env]
-ignore = ["FIDUCIA_NODE_URL", "FIDUCIA_BRAIN_URL", "FIDUCIA_AGENT_CONTROL_PLANE_URL", "FIDUCIA_INTERNAL_SECRET", "FIDUCIA_CONTROL_PLANE_SECRET", "FIDUCIA_ORG_ID", "FIDUCIA_API_KEY", "CLOUDFLARE_API_TOKEN", "KUBECONFIG", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_RESOURCE_ATTRIBUTES", "HOME", "PATH"]
+ignore = ["FIDUCIA_NODE_URL", "FIDUCIA_BRAIN_URL", "FIDUCIA_AGENT_CONTROL_PLANE_URL", "FIDUCIA_FLAGS_CONFIG", "FIDUCIA_INTERNAL_SECRET", "FIDUCIA_CONTROL_PLANE_SECRET", "FIDUCIA_ORG_ID", "FIDUCIA_API_KEY", "CLOUDFLARE_API_TOKEN", "KUBECONFIG", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_RESOURCE_ATTRIBUTES", "HOME", "PATH"]
 
 [flags.log-filter]
 env = "RUST_LOG"
@@ -18,34 +18,3 @@ aliases = ["log-filter"]
 type = "string"
 default = "info,hyper=warn"
 help = "Tracing filter for structured stderr logs."
-
-
-[flags.fiducia-brain-url]
-env = "FIDUCIA_BRAIN_URL"
-long = "fiducia-brain-url"
-type = "string"
-help = "Runtime environment key FIDUCIA_BRAIN_URL."
-
-[flags.fiducia-flags-config]
-env = "FIDUCIA_FLAGS_CONFIG"
-long = "fiducia-flags-config"
-type = "string"
-help = "Runtime environment key FIDUCIA_FLAGS_CONFIG."
-
-[flags.fiducia-node-url]
-env = "FIDUCIA_NODE_URL"
-long = "fiducia-node-url"
-type = "string"
-help = "Runtime environment key FIDUCIA_NODE_URL."
-
-[flags.otel-exporter-otlp-endpoint]
-env = "OTEL_EXPORTER_OTLP_ENDPOINT"
-long = "otel-exporter-otlp-endpoint"
-type = "string"
-help = "Runtime environment key OTEL_EXPORTER_OTLP_ENDPOINT."
-
-[flags.otel-resource-attributes]
-env = "OTEL_RESOURCE_ATTRIBUTES"
-long = "otel-resource-attributes"
-type = "string"
-help = "Runtime environment key OTEL_RESOURCE_ATTRIBUTES."

@@ -79,4 +79,8 @@ COPY --chmod=0755 scripts/sops-entrypoint.sh /usr/local/bin/sops-entrypoint.sh
 COPY --chmod=0644 env/enc/${SOPS_ENV}.env.enc /app/secrets/app.env
 ENV SOPS_SECRETS_FILE=/app/secrets/app.env
 
+# Runtime telemetry is intentionally not baked into the image. The deployment
+# must inject OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, and RUST_LOG from
+# its reviewed environment/configuration source. In particular, cluster DNS
+# names belong to the deployment, not to a portable build artifact.
 ENTRYPOINT ["/usr/local/bin/sops-entrypoint.sh", "/usr/local/bin/fiducia-mcp"]

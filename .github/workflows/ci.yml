@@ -166,7 +166,7 @@ jobs:
         run: |
           python3 -m py_compile scripts/smoke-mcp-stdio.py
           python3 scripts/smoke-mcp-stdio.py "fiducia-mcp:${GITHUB_SHA}"
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
         with:
           tool: cargo-audit@0.22.2
       - name: Dependency audit

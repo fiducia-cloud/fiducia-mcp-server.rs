@@ -83,4 +83,5 @@ ENV SOPS_SECRETS_FILE=/app/secrets/app.env
 # must inject OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, and RUST_LOG from
 # its reviewed environment/configuration source. In particular, cluster DNS
 # names belong to the deployment, not to a portable build artifact.
-ENTRYPOINT ["/usr/local/bin/sops-entrypoint.sh", "/usr/local/bin/fiducia-mcp"]
+ENTRYPOINT ["/usr/local/bin/sops-entrypoint.sh"]
+CMD ["/usr/local/bin/fiducia-mcp"]

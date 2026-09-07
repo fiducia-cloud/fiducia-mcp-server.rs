@@ -1,9 +1,12 @@
 #!/bin/sh
 # Container entrypoint: decrypt secrets at RUN time, then exec the real command.
 #
-# Pair with a Dockerfile that sets
-#   ENTRYPOINT ["/usr/local/bin/sops-entrypoint.sh", "<the real entrypoint>"]
-# so this script receives the real command as "$@" and hands off with exec.
+# Pair with a Dockerfile that keeps the wrapper and default command separate:
+#   ENTRYPOINT ["/usr/local/bin/sops-entrypoint.sh"]
+#   CMD ["<the real entrypoint>"]
+# Docker appends CMD to ENTRYPOINT, so this script receives the command as "$@"
+# and hands off with exec. Operators may replace CMD without replacing the
+# decryption wrapper.
 #
 # Decryption happens here and never at build time: a secret decrypted during
 # `docker build` is baked into an image layer forever. The image carries only

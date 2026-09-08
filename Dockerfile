@@ -61,9 +61,9 @@ RUN apt-get update \
     && groupadd --gid 65532 nonroot \
     && useradd --uid 65532 --gid 65532 --home-dir /home/nonroot --create-home \
       --shell /usr/sbin/nologin nonroot
-COPY --from=kubectl --chown=65532:65532 /tmp/kubectl /usr/local/bin/kubectl
-COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/target/release/fiducia-mcp /usr/local/bin/fiducia-mcp
-COPY --from=build --chown=65532:65532 /workspace/fiducia-mcp-server.rs/.cli-flags.toml /usr/local/share/fiducia-mcp-server/.cli-flags.toml
+COPY --from=kubectl --chown=0:0 --chmod=0555 /tmp/kubectl /usr/local/bin/kubectl
+COPY --from=build --chown=0:0 --chmod=0555 /workspace/fiducia-mcp-server.rs/target/release/fiducia-mcp /usr/local/bin/fiducia-mcp
+COPY --from=build --chown=0:0 --chmod=0444 /workspace/fiducia-mcp-server.rs/.cli-flags.toml /usr/local/share/fiducia-mcp-server/.cli-flags.toml
 ENV HOME=/home/nonroot
 USER 65532:65532
 
@@ -71,11 +71,11 @@ USER 65532:65532
 # The image carries only CIPHERTEXT (env/enc/<SOPS_ENV>.env.enc) and the sops
 # binary. The age key arrives at run time (SOPS_AGE_KEY / SOPS_AGE_KEY_FILE);
 # scripts/sops-entrypoint.sh decrypts into the process environment and execs
-# the real command, so no plaintext ever lands in a layer or on disk.
-# See env/README.md.
+# the real command, without creating plaintext files or image layers.
+# See env/README.md. Required deployments must set SOPS_REQUIRE_KEY=1.
 ARG SOPS_ENV=local
-COPY --chmod=0755 --from=ghcr.io/getsops/sops:v3.10.2-alpine /usr/local/bin/sops /usr/local/bin/sops
-COPY --chmod=0755 scripts/sops-entrypoint.sh /usr/local/bin/sops-entrypoint.sh
+COPY --chmod=0555 --from=ghcr.io/getsops/sops:v3.10.2-alpine /usr/local/bin/sops /usr/local/bin/sops
+COPY --chmod=0555 scripts/sops-entrypoint.sh /usr/local/bin/sops-entrypoint.sh
 COPY --chmod=0644 env/enc/${SOPS_ENV}.env.enc /app/secrets/app.env
 ENV SOPS_SECRETS_FILE=/app/secrets/app.env
 
@@ -83,5 +83,5 @@ ENV SOPS_SECRETS_FILE=/app/secrets/app.env
 # must inject OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, and RUST_LOG from
 # its reviewed environment/configuration source. In particular, cluster DNS
 # names belong to the deployment, not to a portable build artifact.
-ENTRYPOINT ["/usr/local/bin/sops-entrypoint.sh"]
-CMD ["/usr/local/bin/fiducia-mcp"]
+ENTRYPOINT ["/usr/local/bin/sops-entrypoint.sh", "/usr/local/bin/fiducia-mcp"]
+CMD []

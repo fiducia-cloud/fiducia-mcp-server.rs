@@ -19,32 +19,24 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Verify SOPS wrapper syntax and exit propagation
-        shell: bash
-        run: |
-          set -euo pipefail
-          sh -n scripts/sops-entrypoint.sh
-          test "$(SOPS_SECRETS_FILE=/tmp/not-present sh scripts/sops-entrypoint.sh sh -c 'printf ok')" = "ok"
-          set +e
-          SOPS_SECRETS_FILE=/tmp/not-present sh scripts/sops-entrypoint.sh sh -c 'exit 23'
-          status=$?
-          set -e
-          test "$status" -eq 23
+      - name: Verify SOPS required-secret, literal-value, environment, and exec contracts
+        run: node --test scripts/sops-entrypoint.test.mjs
 
   docker-build:
+    needs: entrypoint-contract
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build --progress=plain --tag fiducia-mcp:ci .
-      - name: Verify image execution metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(docker image inspect fiducia-mcp:ci --format '{{json .Config.Entrypoint}}')" = '["/usr/local/bin/sops-entrypoint.sh"]'
-          test "$(docker image inspect fiducia-mcp:ci --format '{{json .Config.Cmd}}')" = '["/usr/local/bin/fiducia-mcp"]'
+      - name: Exercise the real non-root, read-only image
+        env:
+          CONTAINER_TEST_IMAGE: fiducia-mcp:ci
+          CONTAINER_TEST_ARCH: amd64
+        run: node --test docker/sops-image-contract.test.mjs
 
   buildx-multiarch:
+    needs: entrypoint-contract
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
@@ -59,3 +51,13 @@ jobs:
             --output type=oci,dest=/tmp/fiducia-mcp.oci.tar \
             .
           test -s /tmp/fiducia-mcp.oci.tar
+      - name: Load and execute both platform images using the same build cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            image="fiducia-mcp:ci-$arch"
+            docker buildx build --platform "linux/$arch" --load --tag "$image" .
+            CONTAINER_TEST_IMAGE="$image" CONTAINER_TEST_ARCH="$arch" \
+              node --test docker/sops-image-contract.test.mjs
+          done

@@ -9,7 +9,7 @@ use std::{
 use flags2env::BundledFlags2Env;
 use tracing_subscriber::EnvFilter;
 
-use crate::env_map::{EnvMap, env_value, get_env_map, process_argv, process_env_map};
+use crate::env_map::{env_value, get_env_map, process_argv, process_env_map, EnvMap};
 
 const DEFAULT_LOG_FILTER: &str = "info,hyper=warn";
 
@@ -123,11 +123,9 @@ mod tests {
             "--log-filter=debug,hyper=warn".to_owned(),
         ];
         let env = parse_cli_flags(&argv, &config_path()).expect("valid operational flag");
-        assert!(
-            env_value(&env, "RUST_LOG")
-                .unwrap_or_default()
-                .contains("debug")
-        );
+        assert!(env_value(&env, "RUST_LOG")
+            .unwrap_or_default()
+            .contains("debug"));
     }
 
     #[test]

@@ -14,10 +14,12 @@ pub fn get_env_map(
     initial: EnvMap,
     overrides: impl IntoIterator<Item = (String, String)>,
 ) -> EnvMap {
-    overrides.into_iter().fold(initial, |mut env, (key, value)| {
-        env.insert(key, value);
-        env
-    })
+    overrides
+        .into_iter()
+        .fold(initial, |mut env, (key, value)| {
+            env.insert(key, value);
+            env
+        })
 }
 
 /// Return a trimmed non-empty value from an environment snapshot.

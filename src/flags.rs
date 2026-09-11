@@ -1,7 +1,6 @@
 //! Strict, stdio-safe flags2env startup configuration.
 
 use std::{
-    error::Error,
     io,
     path::{Path, PathBuf},
 };
@@ -17,7 +16,7 @@ fn invalid_input(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message.into())
 }
 
-pub fn parse_cli_flags(argv: &[String], config_path: &Path) -> Result<EnvMap, Box<dyn Error>> {
+pub fn parse_cli_flags(argv: &[String], config_path: &Path) -> io::Result<EnvMap> {
     let config_path = config_path
         .to_str()
         .ok_or_else(|| invalid_input(".cli-flags.toml path is not valid UTF-8"))?;
@@ -33,22 +32,19 @@ pub fn parse_cli_flags(argv: &[String], config_path: &Path) -> Result<EnvMap, Bo
         return Err(invalid_input(format!(
             "unknown command-line option(s): {}",
             parsed.unknown_options.join(", ")
-        ))
-        .into());
+        )));
     }
     if !parsed.errors.is_empty() {
         return Err(invalid_input(format!(
             "invalid command-line value(s): {}",
             parsed.errors.join("; ")
-        ))
-        .into());
+        )));
     }
     if !parsed.extras.is_empty() {
         return Err(invalid_input(format!(
             "unexpected positional argument(s): {}",
             parsed.extras.join(", ")
-        ))
-        .into());
+        )));
     }
 
     let env = get_env_map(EnvMap::new(), parsed.flags);
@@ -58,13 +54,15 @@ pub fn parse_cli_flags(argv: &[String], config_path: &Path) -> Result<EnvMap, Bo
     Ok(env)
 }
 
-pub fn resolve_config_path() -> Result<PathBuf, Box<dyn Error>> {
+pub fn resolve_config_path() -> io::Result<PathBuf> {
     if let Some(path) = std::env::var_os("FIDUCIA_FLAGS_CONFIG").filter(|value| !value.is_empty()) {
         let path = PathBuf::from(path);
         if path.is_file() {
             return Ok(path);
         }
-        return Err(invalid_input("FIDUCIA_FLAGS_CONFIG does not point to a readable file").into());
+        return Err(invalid_input(
+            "FIDUCIA_FLAGS_CONFIG does not point to a readable file",
+        ));
     }
 
     let mut candidates = Vec::new();
@@ -78,16 +76,12 @@ pub fn resolve_config_path() -> Result<PathBuf, Box<dyn Error>> {
         }
     }
 
-    candidates
-        .into_iter()
-        .find(|candidate| candidate.is_file())
-        .ok_or_else(|| {
-            invalid_input("cannot locate .cli-flags.toml; set FIDUCIA_FLAGS_CONFIG to its path")
-                .into()
-        })
+    candidates.into_iter().find(|candidate| candidate.is_file()).ok_or_else(|| {
+        invalid_input("cannot locate .cli-flags.toml; set FIDUCIA_FLAGS_CONFIG to its path")
+    })
 }
 
-pub fn apply_cli_flags() -> Result<EnvMap, Box<dyn Error>> {
+pub fn apply_cli_flags() -> io::Result<EnvMap> {
     let argv = process_argv();
     let config_path = resolve_config_path()?;
     Ok(get_env_map(
@@ -96,16 +90,15 @@ pub fn apply_cli_flags() -> Result<EnvMap, Box<dyn Error>> {
     ))
 }
 
-pub fn process_startup_flags() -> Result<EnvMap, Box<dyn Error>> {
+pub fn process_startup_flags() -> io::Result<EnvMap> {
     apply_cli_flags()
 }
 
-pub fn process_log_filter() -> Result<EnvFilter, Box<dyn Error>> {
+pub fn process_log_filter() -> io::Result<EnvFilter> {
     let env = apply_cli_flags()?;
     let filter = env_value(&env, "RUST_LOG").unwrap_or(DEFAULT_LOG_FILTER);
     EnvFilter::try_new(filter)
         .map_err(|error| invalid_input(format!("invalid --log-filter value: {error}")))
-        .map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -117,27 +110,30 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_the_declared_stderr_log_filter() {
+    fn accepts_only_the_declared_stderr_log_filter() -> io::Result<()> {
         let argv = vec![
             "fiducia-mcp".to_owned(),
             "--log-filter=debug,hyper=warn".to_owned(),
         ];
-        let env = parse_cli_flags(&argv, &config_path()).expect("valid operational flag");
+        let env = parse_cli_flags(&argv, &config_path())?;
         assert!(env_value(&env, "RUST_LOG")
             .unwrap_or_default()
             .contains("debug"));
+        Ok(())
     }
 
     #[test]
-    fn rejects_secret_bearing_flags() {
+    fn rejects_secret_bearing_flags() -> io::Result<()> {
         let argv = vec![
             "fiducia-mcp".to_owned(),
             "--fiducia-api-key=must-remain-environment-only".to_owned(),
         ];
-        let error = parse_cli_flags(&argv, &config_path())
-            .expect_err("secret-bearing option must remain unknown")
-            .to_string();
-        assert!(error.contains("unknown command-line option"));
+        let error = match parse_cli_flags(&argv, &config_path()) {
+            Err(error) => error,
+            Ok(_) => return Err(invalid_input("secret-bearing option was accepted")),
+        };
+        assert!(error.to_string().contains("unknown command-line option"));
+        Ok(())
     }
 
     #[test]
@@ -156,16 +152,16 @@ mod tests {
     }
 
     #[test]
-    fn cli_overrides_merge_into_map_without_mutating_process_env() {
+    fn cli_overrides_merge_into_map_without_mutating_process_env() -> io::Result<()> {
         let before = std::env::var_os("RUST_LOG");
         let parsed = parse_cli_flags(
             &["fiducia-mcp".into(), "--log-filter=debug".into()],
             &config_path(),
-        )
-        .expect("valid flags");
+        )?;
         let env = get_env_map(EnvMap::from([("RUST_LOG".into(), "info".into())]), parsed);
         assert_eq!(env_value(&env, "RUST_LOG"), Some("debug"));
         assert_eq!(std::env::var_os("RUST_LOG"), before);
+        Ok(())
     }
 
     #[test]

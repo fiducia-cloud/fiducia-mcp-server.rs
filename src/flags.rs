@@ -76,9 +76,12 @@ pub fn resolve_config_path() -> io::Result<PathBuf> {
         }
     }
 
-    candidates.into_iter().find(|candidate| candidate.is_file()).ok_or_else(|| {
-        invalid_input("cannot locate .cli-flags.toml; set FIDUCIA_FLAGS_CONFIG to its path")
-    })
+    candidates
+        .into_iter()
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| {
+            invalid_input("cannot locate .cli-flags.toml; set FIDUCIA_FLAGS_CONFIG to its path")
+        })
 }
 
 pub fn apply_cli_flags() -> io::Result<EnvMap> {

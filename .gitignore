@@ -43,3 +43,6 @@ env/dec
 
 # machine-local symlink to ORESoftware/my-ai AGENTS.md; never committed
 .ores/
+
+# Sanctioned scratch locations - AGENTS.md requires both, trailing-slash form
+temp/

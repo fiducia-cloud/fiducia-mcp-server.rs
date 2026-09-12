@@ -1,0 +1,63 @@
+name: Container entrypoint and multi-arch
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-entrypoint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  entrypoint-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify SOPS required-secret, literal-value, environment, and exec contracts
+        run: node --test scripts/sops-entrypoint.test.mjs
+
+  docker-build:
+    needs: entrypoint-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build --progress=plain --tag fiducia-mcp:ci .
+      - name: Exercise the real non-root, read-only image
+        env:
+          CONTAINER_TEST_IMAGE: fiducia-mcp:ci
+          CONTAINER_TEST_ARCH: amd64
+        run: node --test docker/sops-image-contract.test.mjs
+
+  buildx-multiarch:
+    needs: entrypoint-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build amd64 and arm64 OCI image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --progress=plain \
+            --output type=oci,dest=/tmp/fiducia-mcp.oci.tar \
+            .
+          test -s /tmp/fiducia-mcp.oci.tar
+      - name: Load and execute both platform images using the same build cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            image="fiducia-mcp:ci-$arch"
+            docker buildx build --platform "linux/$arch" --load --tag "$image" .
+            CONTAINER_TEST_IMAGE="$image" CONTAINER_TEST_ARCH="$arch" \
+              node --test docker/sops-image-contract.test.mjs
+          done

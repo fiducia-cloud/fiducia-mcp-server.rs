@@ -1,0 +1,20 @@
+name: IndieBuild PR Handoff
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  github-actions-smoke:
+    name: GitHub Actions syntax and trigger smoke
+    # Intentionally skip at the JOB level. A step-level `exit 0` would still
+    # allocate a GitHub-hosted runner and consume minutes. GitHub parses this
+    # workflow and evaluates the PR trigger; gha-indie-worker on indiebuild.dev
+    # performs the real rust-verify suite and posts indiebuild.dev/ci to the SHA.
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'PR verification is deferred to https://indiebuild.dev'

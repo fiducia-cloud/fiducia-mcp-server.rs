@@ -7,4 +7,4 @@ permissions:
   contents: read
 jobs:
   fleet-contract:
-    uses: ORESoftware/mcp-rust-libs/.github/workflows/mcp-fleet-admission.yml@59773e4f508de07d62720d1ca9ae5f5ef09df453
+    uses: ORESoftware/mcp-rust-libs/.github/workflows/mcp-fleet-admission.yml@f55234517f4167ed55045e0c2f116725cbeeb928

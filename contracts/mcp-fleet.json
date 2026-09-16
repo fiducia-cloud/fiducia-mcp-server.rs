@@ -1,0 +1,6 @@
+{
+  "schemaVersion":"ores.mcp-fleet.v1","serverClass":"regular",
+  "authorities":{"interfaces":"ORESoftware/ores-interfaces","apiDocs":"ORESoftware/api-docs","schemaValidator":"ORESoftware/typespec-json-schema-validator","sharedRuntime":"ORESoftware/mcp-rust-libs","telemetryCore":"ores-otel/ores-mcp-server-core-libs.rs","ecosystemPrefix":"ORESoftware/ores-"},
+  "security":{"closedToolSchemas":true,"boundedOutputs":true,"secretToolArguments":false,"adminSeparateDeployable":true,"clientRoleGrantsAdmin":false,"genericExecutionAllowed":false},
+  "contracts":{"jsonSchemaDraft":"2020-12","apiDocsSchema":"ore.api-docs.v1","typeSpecAuthority":"independent","jsonSchemaAuthority":"independent","failClosedEvidence":true}
+}

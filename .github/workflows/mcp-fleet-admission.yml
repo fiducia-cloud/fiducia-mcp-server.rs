@@ -1,0 +1,10 @@
+name: ORE MCP fleet admission
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  fleet-contract:
+    uses: ORESoftware/mcp-rust-libs/.github/workflows/mcp-fleet-admission.yml@59773e4f508de07d62720d1ca9ae5f5ef09df453

@@ -1,10 +1,10 @@
 schema_version: ores.compose.v1
-project: fiducia-mcp-server.rs
+project: fiducia-mcp-server
 allow_lazy_start: false
 
 services:
-  fiducia-mcp-server.rs:
-    name: fiducia-mcp-server.rs
+  fiducia-mcp-server:
+    name: fiducia-mcp-server
     runtime: host
     build:
       - ["cargo", "build", "--bins"]

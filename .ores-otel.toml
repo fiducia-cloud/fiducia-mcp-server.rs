@@ -1,0 +1,17 @@
+# Telemetry policy for fiducia-mcp-server.rs. Endpoints and credentials stay in the environment.
+version = 1
+
+[server]
+enabled = true
+service_name = "fiducia-mcp-server.rs"
+
+[server.logging]
+enabled = true
+level = "info"
+console = true
+auto_send = false
+
+[server.tracing]
+enabled = true
+sample_ratio = 1.0
+propagators = ["tracecontext", "baggage"]

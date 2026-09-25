@@ -13,20 +13,22 @@ class State:
 
 
 def next_states(s: State):
+    if s.irreversible_done:
+        return [s]
     out = []
     if not s.tenant_ctx:
-        out.append(State(True, s.authorized, s.lease_held, s.current_fence, s.presented_fence, s.irreversible_done))
+        out.append(State(True, s.authorized, s.lease_held, s.current_fence, s.presented_fence, False))
     if not s.authorized:
-        out.append(State(s.tenant_ctx, True, s.lease_held, s.current_fence, s.presented_fence, s.irreversible_done))
+        out.append(State(s.tenant_ctx, True, s.lease_held, s.current_fence, s.presented_fence, False))
     if not s.lease_held and s.current_fence < 2:
         nf = s.current_fence + 1
-        out.append(State(s.tenant_ctx, s.authorized, True, nf, nf, s.irreversible_done))
+        out.append(State(s.tenant_ctx, s.authorized, True, nf, nf, False))
     if s.lease_held:
-        out.append(State(s.tenant_ctx, s.authorized, False, s.current_fence, s.presented_fence, s.irreversible_done))
+        out.append(State(s.tenant_ctx, s.authorized, False, s.current_fence, s.presented_fence, False))
     for token in range(s.current_fence + 1):
         if token != s.presented_fence:
-            out.append(State(s.tenant_ctx, s.authorized, s.lease_held, s.current_fence, token, s.irreversible_done))
-    if s.tenant_ctx and s.authorized and s.lease_held and s.presented_fence == s.current_fence and not s.irreversible_done:
+            out.append(State(s.tenant_ctx, s.authorized, s.lease_held, s.current_fence, token, False))
+    if s.tenant_ctx and s.authorized and s.lease_held and s.presented_fence == s.current_fence:
         out.append(State(True, True, True, s.current_fence, s.presented_fence, True))
     return out
 

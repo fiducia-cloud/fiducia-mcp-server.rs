@@ -1,0 +1,53 @@
+name: bounded formal state-space
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  model-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MODEL_KIND: api
+      MODEL_SCOPE: fiducia MCP operation idempotency
+      MODEL_BOUND: '7'
+    steps:
+      - name: Exhaustively check bounded safety model
+        shell: bash
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const kind=process.env.MODEL_KIND, bound=Number(process.env.MODEL_BOUND||7);
+          const models={
+            generation:{initial:{authority:0,applied:0,stale_attempts:0,stale_commits:0},steps:[['grant',s=>({...s,authority:s.authority+1})],['apply-current',s=>s.authority?({...s,applied:s.authority}):s],['apply-stale',s=>({...s,stale_attempts:s.stale_attempts+1})]],inv:s=>s.authority>=0&&s.applied>=0&&s.applied<=s.authority&&s.stale_commits===0},
+            auth:{initial:{authority:0,session:null,revoked:true,stale_attempts:0,stale_accepts:0},steps:[['issue',s=>({authority:s.authority+1,session:s.authority+1,revoked:false,stale_attempts:s.stale_attempts,stale_accepts:s.stale_accepts})],['revoke',s=>({...s,authority:s.authority+1,revoked:true})],['stale-check',s=>({...s,stale_attempts:s.stale_attempts+1})]],inv:s=>s.stale_accepts===0&&(s.revoked||s.session===s.authority)},
+            sync:{initial:{local:0,remote:0,ack:0,stale_attempts:0,stale_accepts:0},steps:[['local-write',s=>({...s,local:s.local+1})],['push',s=>({...s,remote:Math.max(s.remote,s.local),ack:Math.max(s.ack,s.local)})],['pull',s=>({...s,local:Math.max(s.local,s.remote)})],['stale-ack',s=>({...s,stale_attempts:s.stale_attempts+1})]],inv:s=>s.ack<=s.remote&&s.ack<=s.local&&s.stale_accepts===0},
+            ledger:{initial:{a:2,b:2,total:4,overdraft_accepts:0},steps:[['a-to-b',s=>s.a>0?({...s,a:s.a-1,b:s.b+1}):s],['b-to-a',s=>s.b>0?({...s,b:s.b-1,a:s.a+1}):s],['overdraft-attempt',s=>s]],inv:s=>s.a>=0&&s.b>=0&&s.a+s.b===s.total&&s.overdraft_accepts===0},
+            migration:{initial:{version:0,applied:[],regressions:0},steps:[['apply-next',s=>({...s,version:s.version+1,applied:[...s.applied,s.version+1]})],['reapply-current',s=>s],['apply-old',s=>s]],inv:s=>s.regressions===0&&s.applied.length===s.version&&s.applied.every((v,i)=>v===i+1)},
+            package:{initial:{generation:0,v1:null,v2:null,conflicts:0},steps:[['publish-v1',s=>s.v1?s:{...s,v1:'sha-a',generation:s.generation+1}],['publish-v2',s=>s.v2?s:{...s,v2:'sha-b',generation:s.generation+1}],['replay-v1',s=>s],['conflict-v1',s=>s]],inv:s=>s.conflicts===0&&s.generation===(s.v1?1:0)+(s.v2?1:0)},
+            worker:{initial:{epoch:0,owner:null,completed:0,double_owners:0,stale_completions:0},steps:[['claim-a',s=>s.owner?s:{...s,epoch:s.epoch+1,owner:'a'}],['claim-b',s=>s.owner?s:{...s,epoch:s.epoch+1,owner:'b'}],['complete',s=>s.owner?({...s,owner:null,completed:s.epoch}):s],['stale-complete',s=>s]],inv:s=>s.double_owners===0&&s.stale_completions===0&&s.completed<=s.epoch},
+            audit:{initial:{a:false,b:false,failed:false,compliant:false},steps:[['pass-a',s=>({...s,a:true})],['pass-b',s=>({...s,b:true})],['fail',s=>({...s,failed:true,compliant:false})],['attest',s=>({...s,compliant:!s.failed&&s.a&&s.b})]],inv:s=>!s.compliant||(!s.failed&&s.a&&s.b)},
+            api:{initial:{seen:{},commits:0,conflicts:0},steps:[['request-a',s=>s.seen.a?s:{seen:{...s.seen,a:'p1'},commits:s.commits+1,conflicts:s.conflicts}],['request-b',s=>s.seen.b?s:{seen:{...s.seen,b:'p2'},commits:s.commits+1,conflicts:s.conflicts}],['replay-a',s=>s],['conflict-a',s=>s]],inv:s=>s.conflicts===0&&s.commits===Object.keys(s.seen).length}
+          };
+          const m=models[kind]; assert(m,`unknown model ${kind}`);
+          let frontier=[m.initial], seen=new Map([[JSON.stringify(m.initial),m.initial]]);
+          for(let depth=0;depth<=bound;depth++){
+            const next=[];
+            for(const state of frontier){
+              assert(m.inv(state),`${kind}: invariant failed at depth ${depth}: ${JSON.stringify(state)}`);
+              for(const [name,step] of m.steps){
+                const n=step(structuredClone(state));
+                assert(m.inv(n),`${kind}:${name} violated invariant: ${JSON.stringify(n)}`);
+                const key=JSON.stringify(n);
+                if(!seen.has(key)){seen.set(key,n);next.push(n);}
+              }
+            }
+            frontier=next;
+          }
+          assert(seen.size>=3,`${kind}: state space unexpectedly small`);
+          console.log(`bounded formal model OK: scope=${process.env.MODEL_SCOPE} kind=${kind} states=${seen.size} bound=${bound}`);
+          NODE

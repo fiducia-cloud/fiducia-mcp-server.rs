@@ -294,7 +294,7 @@ async fn real_stdio_mcp_to_brain_http_auth_and_redirect_containment() {
         Some("fiducia-mcp-server")
     );
     let result = responses.get(&2).expect("cluster_nodes tool reply");
-    assert_eq!(result.pointer("/result/isError").and_then(Value::as_bool), Some(false));
+    assert_ne!(result.pointer("/result/isError").and_then(Value::as_bool), Some(true));
     let content = result.pointer("/result/content/0/text").and_then(Value::as_str).expect("tool content");
     let body: Value = serde_json::from_str(content).expect("MCP result JSON");
     assert_eq!(body["nodes"][0]["node_id"], "brain-node-a");

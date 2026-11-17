@@ -31,8 +31,6 @@ sops-private*.txt
 
 # direnv-generated Nix dev-shell cache
 .direnv/
-tmp
-temp
 tmp/worktrees
 temp/worktrees
 
@@ -46,3 +44,17 @@ env/dec
 
 # Sanctioned scratch locations - AGENTS.md requires both, trailing-slash form
 temp/
+
+# ORESoftware SOPS dotenv ignore contract (ORESoftware/.github docs/sops-environment-standard.md)
+*.env
+*/*.env
+*/**/*.env
+.env.*
+*.env.*
+!.env.example
+
+/env/dec/
+
+/env/enc/*
+!/env/enc/dev.env.enc
+!/env/enc/prod.env.enc
